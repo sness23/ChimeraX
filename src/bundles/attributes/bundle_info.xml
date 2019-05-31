@@ -1,16 +1,17 @@
-<BundleInfo name="ChimeraX-ShowAttr" version="1.0"
-	    package="chimerax.show_attr"
+<BundleInfo name="ChimeraX-Attributes" version="1.0"
+	    package="chimerax.attributes"
   	    minSessionVersion="1" maxSessionVersion="1">
 
   <Author>UCSF RBVI</Author>
   <Email>chimerax@cgl.ucsf.edu</Email>
   <URL>https://www.rbvi.ucsf.edu/chimerax/</URL>
 
-  <Synopsis>Render/select by attribute</Synopsis>
-  <Description>Change coloring or depiction or selection based on attribute value</Description>
+  <Synopsis>Attribute handling</Synopsis>
+  <Description>Display/select by attribute value and register/save custom attributes</Description>
 
   <Categories>
     <Category name="Depiction"/>
+    <Category name="General Controls"/>
   </Categories>
 
   <Dependencies>
