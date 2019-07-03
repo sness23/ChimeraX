@@ -97,14 +97,20 @@ class IHMModel(Model):
         amodels = self.read_atomic_models(filename, mgroup)
         self.atomic_models = amodels
 
-        # Align 2DEM to projection position for first sphere model
-        if smodels:
-            s0 = smodels[0]
+        # Align 2DEM to projection position for first sphere or atomic model
+        if smodels or amodels:
+            s0 = smodels[0] if smodels else amodels[0]
             for v in em2d:
                 if hasattr(v, 'ihm_model_projections'):
                     p = v.ihm_model_projections.get(s0.ihm_model_ids[0])
                     if p:
                         v.position = p
+                    else:
+                        # No alignment provided for map so hide it.
+                        v.display = False
+                else:
+                    # No alignment provided for map so hide it.
+                    v.display = False
                         
         # Add crosslinks to sphere models
         if show_sphere_crosslinks:
@@ -310,7 +316,7 @@ class IHMModel(Model):
                 if isinstance(d.location, ihm.location.DatabaseLocation):
                     ds[d._id] = DatabaseDataSet(d.location.db_name,
                                                 d.location.access_code)
-                else:
+                elif d.location is not None:
                     finfo = self.file_info(d.location)
                     if finfo:
                         ds[d._id] = FileDataSet(finfo)
@@ -417,7 +423,9 @@ class IHMModel(Model):
     # -----------------------------------------------------------------------------
     #
     def model_names(self):
-        return {m._id: (m.name if m.name else 'result %s' % m._id)
+        # Work around python-ihm issue #42
+        return {m._id: (m.name if m.name and m.name != ihm.unknown
+                        else 'result %s' % m._id)
                 for mg in self.all_model_groups() for m in mg}
 
     # -----------------------------------------------------------------------------
@@ -594,14 +602,17 @@ class IHMModel(Model):
         # Assign IHM model ids.
         if models:
             mnames = self.model_names()
+        group_ids = set()
         for i,m in enumerate(models):
             # TODO: Need to read model id from the ihm_model_id field in atom_site table.
-            m.display = (i == 0)	# Show only first atomic model
             mid = str(i+1)
             m.ihm_model_ids = [mid]
-            m.ihm_group_id = mgroup[mid]
+            gid = mgroup[mid]
+            m.ihm_group_id = gid
             if mid in mnames:
                 m.name = mnames[mid]
+            m.display = (gid not in group_ids)	# Show only first atomic model in each group
+            group_ids.add(gid)
             m.apply_auto_styling(self.session)
             
         if models:

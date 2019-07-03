@@ -57,7 +57,7 @@ class ModelPanel(ToolInstance):
         self.tree.setAnimated(True)
         self.tree.setUniformRowHeights(True)
         self.tree.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.tree.itemClicked.connect(self._tree_change_cb)
+        self.tree.itemChanged.connect(self._tree_change_cb)
         buttons_layout = QVBoxLayout()
         layout.addLayout(buttons_layout)
         self._items = []
@@ -80,7 +80,7 @@ class ModelPanel(ToolInstance):
         self.session.triggers.add_handler(MODEL_NAME_CHANGED,
             lambda *args: self._initiate_fill_tree(*args, refresh=True))
         from chimerax import atomic
-        atomic.get_triggers(self.session).add_handler("changes", self._changes_cb)
+        atomic.get_triggers().add_handler("changes", self._changes_cb)
         self._frame_drawn_handler = None
         tw.manage(placement="side")
         tw.shown_changed = self._shown_changed
@@ -133,6 +133,7 @@ class ModelPanel(ToolInstance):
         if not self.displayed():
             # Don't update panel when it is hidden.
             return
+        self.tree.blockSignals(True) # particularly itemChanged
         update = self._process_models() and not always_rebuild
         if not update:
             expanded_models = { i._model : i.isExpanded()
@@ -208,6 +209,7 @@ class ModelPanel(ToolInstance):
                     self.tree.expandItem(item)
         for i in range(1,self.tree.columnCount()):
             self.tree.resizeColumnToContents(i)
+        self.tree.blockSignals(False)
 
         self._frame_drawn_handler = None
         from chimerax.core.triggerset import DEREGISTER

@@ -444,10 +444,8 @@ class Session:
                 container.clear()
 
     def __setattr__(self, name, value):
-        # need to actually set attr first,
-        # since add_state_manager will check if the attr exists
         object.__setattr__(self, name, value)
-        if self.snapshot_methods(value) is not None:
+        if not name.startswith('_') and self.snapshot_methods(value, base_type=StateManager) is not None:
             self.add_state_manager(name, value)
 
     def __delattr__(self, name):
@@ -480,7 +478,8 @@ class Session:
         if issubclass(cls, base_type):
             return cls
         elif not hasattr(self, '_snapshot_methods'):
-            from .graphics import View, MonoCamera, OrthographicCamera, Lighting, Material, ClipPlane, Drawing
+            from .graphics import View, MonoCamera, OrthographicCamera, Lighting, Material
+            from .graphics import SceneClipPlane, CameraClipPlane, ClipPlane, Drawing
             from .graphics import gsession as g
             from .geometry import Place, Places, psession as p
             self._snapshot_methods = {
@@ -490,6 +489,8 @@ class Session:
                 Lighting: g.LightingState,
                 Material: g.MaterialState,
                 ClipPlane: g.ClipPlaneState,
+                SceneClipPlane: g.SceneClipPlaneState,
+                CameraClipPlane: g.CameraClipPlaneState,
                 Drawing: g.DrawingState,
                 Place: p.PlaceState,
                 Places: p.PlacesState,
@@ -1009,6 +1010,52 @@ def common_startup(sess):
 def _gen_exception(session):
     raise RuntimeError("Generated exception for testing purposes")
 
+def register_session_save_options_gui(save_dialog):
+    '''
+    Session save gui options are registered in the ui module instead of when the
+    format is registered because the ui does not exist when the format is registered.
+    '''
+    from chimerax.ui import SaveOptionsGUI
+    class SessionSaveOptionsGUI(SaveOptionsGUI):
+        @property
+        def format_name(self):
+            return "ChimeraX session"
+
+        def wildcard(self):
+            from chimerax.ui.open_save import export_file_filter
+            from chimerax.core import toolshed
+            return export_file_filter(toolshed.SESSION)
+        
+        def make_ui(self, parent):
+            from PyQt5.QtWidgets import QFrame, QVBoxLayout, QCheckBox
+
+            container = QFrame(parent)
+
+            layout = QVBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            container.setLayout(layout)
+
+            self._include_maps = im = QCheckBox('Include maps', container)
+            layout.addWidget(im)
+
+            return container
+
+        def save(self, session, filename):
+            import os.path
+            ext = os.path.splitext(filename)[1]
+            from chimerax.core import io
+            fmt = io.format_from_name("ChimeraX session")
+            exts = fmt.extensions
+            if exts and ext not in exts:
+                filename += exts[0]
+            from chimerax.core.commands import run, quote_if_necessary
+            cmd = "save session %s" % quote_if_necessary(filename)
+            if self._include_maps.isChecked():
+                cmd += ' includeMaps true'
+            run(session, cmd)
+
+    save_dialog.register(SessionSaveOptionsGUI())
 
 def _register_core_file_formats(session):
     register_session_format(session)

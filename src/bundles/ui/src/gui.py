@@ -416,9 +416,9 @@ class MainWindow(QMainWindow, PlainTextLog):
         from .open_folder import OpenFolderDialog
         self._open_folder = OpenFolderDialog(self, session)
 
-        from .save_dialog import MainSaveDialog, ImageSaver
-        self.save_dialog = MainSaveDialog(self)
-        ImageSaver(self.save_dialog).register()
+        from .save_dialog import MainSaveDialog, register_save_dialog_options
+        self.save_dialog = MainSaveDialog()
+        register_save_dialog_options(self.save_dialog)
 
         self._hide_tools = False
         self.tool_instance_to_windows = {}
@@ -562,31 +562,24 @@ class MainWindow(QMainWindow, PlainTextLog):
         func(*args, **kw)
 
     def file_open_cb(self, session):
+        self.show_file_open_dialog(session)
+
+    def show_file_open_dialog(self, session, initial_directory = None,
+                              format_name = None):
+        if initial_directory is None:
+            initial_directory = ''
         from PyQt5.QtWidgets import QFileDialog
         from .open_save import open_file_filter
-        paths_and_types = QFileDialog.getOpenFileNames(filter=open_file_filter(all=True))
+        filters = open_file_filter(all=True, format_name=format_name)
+        paths_and_types = QFileDialog.getOpenFileNames(filter=filters,
+                                                       directory=initial_directory)
         paths, types = paths_and_types
         if not paths:
             return
 
         def _qt_safe(session=session, paths=paths):
             from chimerax.core.commands import run, quote_if_necessary
-            ## The following commented-out open command doesn't get multiple volume-plane files
-            ## to open as a single volume, whereas the uncommented code does
-            #run(session, "open " + " ".join([quote_if_necessary(p) for p in paths]))
-            if len(paths) == 1:
-                run(session, "open " + quote_if_necessary(paths[0]))
-            else:
-                # TODO: Make open command handle this including saving in file history.
-                suffixes = set(p[p.rfind('.'):] for p in paths)
-                if len(suffixes) == 1:
-                    # Files have same suffix, open as a single group
-                    session.models.open(paths)
-                else:
-                    # Files have more than one suffix, open each at top-level model.
-                    for p in paths:
-                        session.models.open([p])
-
+            run(session, "open " + " ".join([quote_if_necessary(p) for p in paths]))
         # Opening the model directly adversely affects Qt interfaces that show
         # as a result.  In particular, Multalign Viewer no longer gets hover
         # events correctly, nor tool tips.
@@ -649,8 +642,7 @@ class MainWindow(QMainWindow, PlainTextLog):
                 settings_dw.hide()
             for tool_windows in self.tool_instance_to_windows.values():
                 for tw in tool_windows:
-                    if tw.title in ["Command Line Interface", "Toolbar"]:
-                        # leave the command line and toolbar tool as is
+                    if tw.hides_title_bar:
                         continue
                     if tw.floating:
                         continue
@@ -763,6 +755,7 @@ class MainWindow(QMainWindow, PlainTextLog):
     def _build_status(self):
         from .statusbar import _StatusBar
         self._status_bar = sbar = _StatusBar(self.session)
+        sbar.status('Welcome to ChimeraX', 'blue')
         sb = sbar.widget
         self._global_hide_button = ghb = QToolButton(sb)
         self._rapid_access_button = rab = QToolButton(sb)
@@ -790,7 +783,6 @@ class MainWindow(QMainWindow, PlainTextLog):
         rab.setDefaultAction(rab_action)
         sb.addPermanentWidget(ghb)
         sb.addPermanentWidget(rab)
-        sb.showMessage("Welcome to ChimeraX")
         self.setStatusBar(sb)
 
     def _dockability_change(self, tool_name, dockable):
@@ -1232,6 +1224,11 @@ class MainWindow(QMainWindow, PlainTextLog):
             menu.insertAction(self._get_menu_action(menu, insertion_point), action)
         return action
 
+    def remove_menu(self, menu_names):
+        menu = self._get_target_menu(self.menuBar(), menu_names)
+        if menu:
+            menu.deleteLater()
+
     def _get_menu_action(self, menu, insertion_point):
         from PyQt5.QtWidgets import QAction
         if isinstance(insertion_point, QAction):
@@ -1368,18 +1365,17 @@ class ToolWindow(StatusLogger):
     #: 'side' is either left or right, depending on user preference
     placements = ["side", "right", "left", "top", "bottom"]
 
-    def __init__(self, tool_instance, title, *, close_destroys=True, statusbar=False):
+    def __init__(self, tool_instance, title, *, close_destroys=True, hide_title_bar=False, statusbar=False):
         StatusLogger.__init__(self, tool_instance.session)
         self.tool_instance = tool_instance
         self.close_destroys = close_destroys
         ui = tool_instance.session.ui
         mw = ui.main_window
-        self.__toolkit = _Qt(self, title, statusbar, mw)
+        self.__toolkit = _Qt(self, title, statusbar, hide_title_bar, mw)
         self.ui_area = self.__toolkit.ui_area
         # forward unused keystrokes (to the command line by default)
         self.ui_area.keyPressEvent = self._forward_keystroke
         mw._new_tool_window(self)
-        self._kludge = self.__toolkit
 
     def cleanup(self):
         """Supported API. Perform tool-specific cleanup
@@ -1411,6 +1407,10 @@ class ToolWindow(StatusLogger):
     def floating(self):
         return self.__toolkit.dock_widget.isFloating()
 
+    @property
+    def hides_title_bar(self):
+        return self.__toolkit.hide_title_bar
+
     from PyQt5.QtCore import Qt
     window_placement_to_text = {
         Qt.RightDockWidgetArea: "right",
@@ -1427,6 +1427,10 @@ class ToolWindow(StatusLogger):
         side will be used.  If `placement` is None, the tool will
         be detached from the main window.  If `placement` is another tool window,
         then those tools will be tabbed together.
+
+        If fixed_size is True then the vertical size of the panel will equal the
+        requested size, otherwise the panel could be vertically larger or smaller than
+        its layout requires.
 
         The tool window will be allowed to dock in the allowed_areas, the value
         of which is a bitmask formed from Qt's Qt.DockWidgetAreas flags.
@@ -1572,9 +1576,10 @@ class ChildToolWindow(ToolWindow):
         super().__init__(tool_instance, title, **kw)
 
 class _Qt:
-    def __init__(self, tool_window, title, has_statusbar, main_window):
+    def __init__(self, tool_window, title, has_statusbar, hide_title_bar, main_window):
         self.tool_window = tool_window
         self.title = title
+        self.hide_title_bar = hide_title_bar
         self.main_window = mw = main_window
 
         if not mw:
@@ -1583,6 +1588,10 @@ class _Qt:
         from PyQt5.QtWidgets import QDockWidget, QWidget, QVBoxLayout
         self.dock_widget = dw = QDockWidget(title, mw)
         dw.closeEvent = lambda e, tw=tool_window, mw=mw: mw.close_request(tw, e)
+        if hide_title_bar:
+            dw.topLevelChanged.connect(self.float_changed)
+            self.dock_widget.setTitleBarWidget(QWidget())
+
         container = QWidget()
         layout = QVBoxLayout()
         layout.setSpacing(0)
@@ -1604,15 +1613,19 @@ class _Qt:
         if not self.tool_window:
             # already destroyed
             return
+        is_floating = self.dock_widget.isFloating()
         self.main_window.removeDockWidget(self.dock_widget)
         # free up references
         self.tool_window = None
         self.main_window = None
-        self.dock_widget.widget().destroy()
-        if self.status_bar:
-            self.status_bar.destroy()
-            self.status_bar = None
-        self.dock_widget.destroy()
+        self.status_bar = None
+        # horrible hack to try to work around two different crashes, in 5.12:
+        # 1) destroying floating window closed with red-X with immediate destroy() 
+        # 2) resize event to dead window if deleteLater() used
+        if is_floating:
+            self.dock_widget.deleteLater()
+        else:
+            self.dock_widget.destroy()
 
     @property
     def dockable(self):
@@ -1626,6 +1639,10 @@ class _Qt:
         self.dock_widget.setAllowedAreas(areas)
         if not dockable and not self.dock_widget.isFloating():
             self.dock_widget.setFloating(True)
+
+    def float_changed(self, floating):
+        from PyQt5.QtWidgets import QWidget
+        self.dock_widget.setTitleBarWidget(None if floating else QWidget())
 
     def manage(self, placement, allowed_areas, fixed_size, geometry):
         # map 'side' to the user's preferred side
@@ -1662,13 +1679,10 @@ class _Qt:
             self.dock_widget.setGeometry(geometry)
         self.dock_widget.setAllowedAreas(allowed_areas)
 
-        #QT disable: create a 'hide_title_bar' option
-        if side == Qt.BottomDockWidgetArea:
-            from PyQt5.QtWidgets import QWidget
-            self.dock_widget.setTitleBarWidget(QWidget())
-
-        if self.tool_window.close_destroys:
-            self.dock_widget.setAttribute(Qt.WA_DeleteOnClose)
+        if fixed_size:
+            # Always set vertical size to what sizeHint() asks for.
+            from PyQt5.QtWidgets import QSizePolicy
+            self.dock_widget.widget().setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
     def show_context_menu(self, event):
         _show_context_menu(event, self.tool_window.tool_instance, self.tool_window,
