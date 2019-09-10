@@ -212,6 +212,10 @@ class ModelListWidget(ItemListWidget):
 
        'balloon_help' is the balloon help to provide with the list (if any); if none provided then
        some generic help for  the 'extended' selection mode is provided if applicable
+
+       Do not access or set the value of this widget in trigger handlers that also update the widget.
+       For generic models, those triggers are in session.triggers and are named ADD_MODELS, REMOVE_MODELS,
+       MODEL_ID_CHANGED and MODEL_NAME_CHANGED
     """
     def __init__(self, session, **kw):
         super().__init__(**_process_model_kw(session, **kw))
@@ -301,6 +305,14 @@ class ItemMenuButton(ItemsGenerator, ItemsUpdater, MenuButton):
             menu.addAction(item_name)
         if prev_value not in self.value_map and prev_value not in self._special_items:
             if len(self.value_map) + len(self._special_items) == 1 and self._autoselect_single:
+                # value setter may use previous value, so prevent that by setting to None first,
+                # blocking the value_changed signal as we do so
+                preblocked = self.signalsBlocked()
+                if not preblocked:
+                    self.blockSignals(True)
+                self.value = None
+                if not preblocked:
+                    self.blockSignals(False)
                 self.value = (list(self.value_map.keys()) + self._special_items)[0]
             else:
                 self.value = None
@@ -331,6 +343,10 @@ class ModelMenuButton(ItemMenuButton):
        text, and choosing that menu item is treated as setting self.value to None.
 
        'balloon_help' is the balloon help to provide with the list (if any).
+
+       Do not access or set the value of this widget in trigger handlers that also update the widget.
+       For generic models, those triggers are in session.triggers and are named ADD_MODELS, REMOVE_MODELS,
+       MODEL_ID_CHANGED and MODEL_NAME_CHANGED
     """
     def __init__(self, session, **kw):
         super().__init__(**_process_model_kw(session, **kw))

@@ -332,6 +332,8 @@ class MouseModes:
         x,y = cp
         if x < 0 or y < 0 or x >= w or y >= h:
             return      # Cursor outside of graphics window
+        if self._mouse_buttons_down():
+            return
         from time import time
         t = time()
         moved = (cp != self._mouse_pause_position)
@@ -366,6 +368,10 @@ class MouseModes:
         p = self.graphics_window.mapFromGlobal(QCursor.pos())
         return p.x(), p.y()
 
+    def _mouse_buttons_down(self):
+        from PyQt5.QtCore import Qt
+        return self.session.ui.mouseButtons() != Qt.NoButton
+        
     def _dispatch_mouse_event(self, event, action):
         button, modifiers = self._event_type(event)
         if button is None:
@@ -568,6 +574,7 @@ def keyboard_modifier_names(qt_keyboard_modifiers):
         modifiers = [(Qt.ShiftModifier, 'shift'),
                      (Qt.ControlModifier, 'command'),
                      (Qt.AltModifier, 'option'),
+                     (Qt.AltModifier, 'alt'),
                      (Qt.MetaModifier, 'control')]
     else:
         modifiers = [(Qt.ShiftModifier, 'shift'),

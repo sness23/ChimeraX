@@ -650,6 +650,13 @@ class Residue(CyResidue, State):
         return f(self.name.encode('utf-8'), atom_name.encode('utf-8'))
 
     aa_min_backbone_names = c_function('residue_aa_min_backbone_names', args = (), ret = ctypes.py_object)()
+    aa_max_backbone_names = c_function('residue_aa_max_backbone_names', args = (), ret = ctypes.py_object)()
+    aa_side_connector_names = c_function('residue_aa_side_connector_names', args = (), ret = ctypes.py_object)()
+    aa_min_ordered_backbone_names = c_function('residue_aa_min_ordered_backbone_names', args = (), ret = ctypes.py_object)()
+    na_min_backbone_names = c_function('residue_na_min_backbone_names', args = (), ret = ctypes.py_object)()
+    na_max_backbone_names = c_function('residue_na_max_backbone_names', args = (), ret = ctypes.py_object)()
+    na_side_connector_names = c_function('residue_na_side_connector_names', args = (), ret = ctypes.py_object)()
+    na_min_ordered_backbone_names = c_function('residue_na_min_ordered_backbone_names', args = (), ret = ctypes.py_object)()
 
 Residue.set_py_class(Residue)
 
@@ -1254,7 +1261,7 @@ class StructureData:
 
     def __init__(self, mol_pointer=None, *, logger=None):
         if mol_pointer is None:
-            # Create a new graph
+            # Create a new structure
             from .structure import AtomicStructure
             new_func = 'atomic_structure_new' \
                 if isinstance(self, AtomicStructure) else 'structure_new'
@@ -1293,7 +1300,7 @@ class StructureData:
         doc = "Supported API. Index of the active coordinate set.")
     alt_loc_change_notify = c_property('structure_alt_loc_change_notify', npy_bool, doc=
         '''Whether notifications are issued when altlocs are changed.  Should only be
-        set to true when temporarily changing alt locs in a Python script. Boolean''')
+        set to false when temporarily changing alt locs in a Python script. Boolean''')
     atoms = c_property('structure_atoms', cptr, 'num_atoms', astype = convert.atoms, read_only = True,
         doc = "Supported API. :class:`.Atoms` collection containing all atoms of the structure.")
     ball_scale = c_property('structure_ball_scale', float32,
@@ -1422,7 +1429,7 @@ class StructureData:
         '''Add coordinate sets.  If 'replace' is True, clear out existing coordinate sets first'''
         if len(xyzs.shape) != 3:
             raise ValueError('add_coordsets(): array must be (frames)x(atoms)x3-dimensional')
-        if xyzs.shape[1] != self.num_atoms:
+        if self.num_atoms and xyzs.shape[1] != self.num_atoms:
             raise ValueError('add_coordsets(): second dimension of coordinate array'
                 ' must be same as number of atoms')
         if xyzs.shape[2] != 3:
@@ -1538,12 +1545,17 @@ class StructureData:
                     args = (ctypes.c_void_p, ctypes.c_int, ctypes.c_int))
                 f(index, size)
 
-    def new_residue(self, residue_name, chain_id, pos, insert=' '):
-        '''Supported API. Create a new :class:`.Residue`.'''
+    def new_residue(self, residue_name, chain_id, pos, insert=None, *, precedes=None):
+        ''' Supported API. Create a new :class:`.Residue`.
+            If 'precedes' is None, new residue will be appended to residue list, otherwise the
+            new residue will be inserted before the 'precedes' resdidue.
+        '''
+        if not insert:
+            insert = ' '
         f = c_function('structure_new_residue',
-                       args = (ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_char),
+                       args = (ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_char, ctypes.c_void_p),
                        ret = ctypes.py_object)
-        return f(self._c_pointer, residue_name.encode('utf-8'), chain_id.encode('utf-8'), pos, insert.encode('utf-8'))
+        return f(self._c_pointer, residue_name.encode('utf-8'), chain_id.encode('utf-8'), pos, insert.encode('utf-8'), ctypes.c_void_p(0) if precedes is None else precedes._c_pointer)
 
     @property
     def nonstandard_residue_names(self):
@@ -1593,7 +1605,7 @@ class StructureData:
            residues as the structure currently has.
         '''
         f = c_function('structure_reorder_residues', args = (ctypes.c_void_p, ctypes.py_object))
-        f(self._c_pointer, [r._c_pointer for r in new_order])
+        f(self._c_pointer, [r._c_pointer.value for r in new_order])
 
     @classmethod
     def restore_snapshot(cls, session, data):
@@ -1737,7 +1749,7 @@ class StructureData:
     _ADDDEL_CHANGE = 0x10
     _DISPLAY_CHANGE = 0x20
     _RING_CHANGE = 0x40
-    _ALL_CHANGE = 0x6f  # not _ADDDEL_CHANGE
+    _ALL_CHANGE = 0x7f		# Mask including all change bits
     _graphics_changed = c_property('structure_graphics_change', int32)
 
 # -----------------------------------------------------------------------------
@@ -1746,7 +1758,7 @@ class CoordSet(State):
     '''
     The coordinates for one frame of a Structure
 
-    To create a Bond use the :class:`.AtomicStructure` new_coordset() method.
+    To create a CoordSet use the :class:`.AtomicStructure` new_coordset() method.
     '''
     def __init__(self, cs_pointer):
         set_c_pointer(self, cs_pointer)
@@ -1772,6 +1784,12 @@ class CoordSet(State):
     def session(self):
         "Session that this CoordSet is in"
         return self.structure.session
+
+    @property
+    def xyzs(self):
+        "Numpy array of coordinates"
+        f = c_function('coordset_xyzs', args = (ctypes.c_void_p,), ret = ctypes.py_object)
+        return f(self._c_pointer)
 
     # used by custom-attr registration code
     @property

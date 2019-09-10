@@ -255,7 +255,7 @@ inline bool normalize(float *v)
             return true;
         }
         return false;
-    } catch (std::domain_error) {
+    } catch (std::domain_error &) {
         return false;
     }
 }
@@ -969,6 +969,17 @@ extern "C" EXPORT void set_atom_name(void *atoms, size_t n, pyobject_t *names)
     try {
         for (size_t i = 0; i != n; ++i)
             a[i]->set_name(PyUnicode_AsUTF8(static_cast<PyObject *>(names[i])));
+    } catch (...) {
+        molc_error();
+    }
+}
+
+extern "C" EXPORT void atom_num_alt_locs(void *atoms, size_t n, size_t *nlocs)
+{
+    Atom **a = static_cast<Atom **>(atoms);
+    try {
+        for (size_t i = 0; i != n; ++i)
+            nlocs[i] = a[i]->alt_locs().size();
     } catch (...) {
         molc_error();
     }
@@ -2927,7 +2938,8 @@ extern "C" EXPORT PyObject *residue_unique_sequences(void *residues, size_t n, i
                     auto seqi = smap.find(seq);
                     if (seqi == smap.end())
                       {
-                        si = cmap[c] = smap[seq] = smap.size()+1;
+                        int next_id = smap.size()+1;
+                        si = cmap[c] = smap[seq] = next_id;
                         PyList_Append(seqs, unicode_from_string(seq));
                       }
                     else
@@ -3961,6 +3973,26 @@ extern "C" EXPORT void coordset_structure(void *coordsets, size_t n, pyobject_t 
     } catch (...) {
         molc_error();
     }
+}
+
+extern "C" EXPORT PyObject* coordset_xyzs(void *coordset)
+{
+    CoordSet *cs = static_cast<CoordSet*>(coordset);
+
+    PyObject* ret_val;
+    try {
+        double *v;
+        ret_val = python_double_array(cs->coords().size(), 3, &v);
+        for (auto xyz: cs->coords()) {
+            *v++ = xyz[0];
+            *v++ = xyz[1];
+            *v++ = xyz[2];
+        }
+    } catch (...) {
+        molc_error();
+        return nullptr;
+    }
+    return ret_val;
 }
 
 // -------------------------------------------------------------------------
@@ -5224,11 +5256,12 @@ extern "C" EXPORT void structure_new_coordset_index_size(void *mol, int32_t inde
     }
 }
 
-extern "C" EXPORT PyObject *structure_new_residue(void *mol, const char *residue_name, const char *chain_id, int pos, char insert)
+extern "C" EXPORT PyObject *structure_new_residue(void *mol, const char *residue_name, const char *chain_id, int pos, char insert, void* precedes)
 {
     Structure *m = static_cast<Structure *>(mol);
+    Residue *nb = static_cast<Residue *>(precedes);
     try {
-        Residue *r = m->new_residue(residue_name, chain_id, pos, insert);
+        Residue *r = m->new_residue(residue_name, chain_id, pos, insert, nb, false);
         return r->py_instance(true);
     } catch (...) {
         molc_error();

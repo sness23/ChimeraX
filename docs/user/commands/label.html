@@ -78,10 +78,16 @@ The command <b>label listfonts</b> lists the possible <a href="#font">fonts</a>
 in the <a href="../tools/log.html"><b>Log</b></a>.
 </p><p>
 3D labels can also be added/deleted by clicking in the graphics window
-(see <a href="ui.html#mousemode"><b>mousemode</b></a>).
-For adding titles and other text at fixed positions in the window
+with the <b>label</b> <a href="ui.html#mousemode">mouse mode</a>
+<a href="../tools/mousemodes.html" title="Mouse Modes for Right Button...">
+<img class="icon" border=1 src="../tools/mouse-icons/label.png"></a>.
+To add text and symbols at any X,Y position in the window
 for presentation-quality images and movies,
-see the <a href="2dlabels.html"><b>2dlabels</b></a> command.
+see the <a href="2dlabels.html"><b>2dlabels</b></a> command instead.
+Both kinds of labels can be repositioned with the <b>move label</b> 
+<a href="ui.html#mousemode">mouse mode</a>
+<a href="../tools/mousemodes.html" title="Mouse Modes for Right Button...">
+<img class="icon" border=1 src="../tools/mouse-icons/movelabel.png"></a>.
 <p>
 
 <a name="options"></a>
@@ -120,17 +126,17 @@ Carriage returns are indicated with <b>\n</b>.
 <b>color</b>&nbsp;&nbsp;<a href="colornames.html"><i>color-spec</i></a>&nbsp;|&nbsp;<b>default</b>
 <br>
 Set label color (default <b>white</b> or <b>black</b>
-depending on the color of the <a href="#background">label background</a>, 
+depending on the color of the <a href="#bgColor">label background</a>, 
 if any, otherwise the <a href="set.html#bgColor">window background </a>). 
 </blockquote>
 
-<a name="background"></a>
+<a name="bgColor"></a>
 <blockquote>
-<b>background</b>&nbsp;&nbsp;<a href="colornames.html"><i>color-spec</i></a>&nbsp;|&nbsp;<b>none</b>
+<b>bgColor</b>&nbsp;&nbsp;<a href="colornames.html"><i>color-spec</i></a>&nbsp;|&nbsp;<b>none</b>
 <br>
 Show a rectangular background of the 
 <a href="colornames.html">specified color</a>
-behind the label text (default <b>none</b>, no background)
+behind the label text (default <b>none</b>, no background).
 </blockquote>
 
 <blockquote>
@@ -183,7 +189,7 @@ relative positions in 3D (default <b>true</b>);
 can be set differently for different models.
 Labels that are not on top will not show through a transparent surface 
 unless <i>all</i> of the labels displayed for that model have a 
-<a href="#background">background</a>.
+<a href="#bgColor">background</a>.
 </blockquote>
 
 <a name="orient"></a>
@@ -212,5 +218,5 @@ those with <a href="#height">fixed heights</a> always face the viewer.
 
 <hr>
 <address>UCSF Resource for Biocomputing, Visualization, and Informatics / 
-June 2019</address>
+August 2019</address>
 </body></html> 

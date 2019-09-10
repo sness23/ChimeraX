@@ -547,8 +547,7 @@ class RegionBrowser:
                             self._seqRenamedHandlerID)
         """
         if self._sel_change_handler:
-            from chimerax import atomic
-            atomic.get_triggers().remove_handler(self._sel_change_handler)
+            self._sel_change_handler.remove()
         """
         for rd in self.rename_dialogs.values():
             rd.destroy()
@@ -1137,8 +1136,8 @@ class RegionBrowser:
             fill=sv.settings.sel_region_interior, outline=sv.settings.sel_region_border)
         sel_region.clear()
 
-        from chimerax.atomic import selected_atoms
-        sel_residues = set(selected_atoms(self.tool_window.session).residues)
+        from chimerax.atomic import selected_residues
+        sel_residues = set(selected_residues(self.tool_window.session))
         blocks = []
         for aseq in self.seq_canvas.alignment.seqs:
             for match_map in aseq.match_maps.values():
@@ -1551,9 +1550,10 @@ class RegionBrowser:
                 control_name = mod_key_info("control")[1]
                 self.seq_canvas.sv.status(
                     "%s-drag to add to region; "
-                    "%s-drag to start new region" % (shift_name.capitalize(), control_name),
-                    follow_with="Tools->Region Browser to change region colors; "
-                    "%s left/right arrow to realign region" % control_name, follow_time=15)
+                    "%s-drag to start new region" % (shift_name.capitalize(), control_name))
+                    #TODO:
+                    #follow_with="Info->Region Browser to change region colors; "
+                    #"%s left/right arrow to realign region" % control_name, follow_time=15)
             else:
                 sv = self.seq_canvas.sv
                 sv.status("Region RMSD: %.3f" % rmsd)

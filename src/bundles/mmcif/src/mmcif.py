@@ -385,8 +385,9 @@ def load_mmCIF_templates(filename):
     _mmcif.load_mmCIF_templates(filename)
 
 
-def quote(s):
+def quote(s, max_len=60):
     """Return CIF 1.1 data value version of string"""
+    # max_len is for mimicing the output from the PDB (see #2230)
     s = str(s)
     examine = s[0:1]
     sing_quote = examine == "'"
@@ -416,7 +417,7 @@ def quote(s):
                 line_break = True
             else:
                 special = True
-    if line_break or (sing_quote and dbl_quote):
+    if line_break or (sing_quote and dbl_quote) or (max_len and len(s) > max_len):
         return '\n;' + s + '\n;\n'
     if sing_quote:
         return '"%s"' % s
@@ -835,4 +836,5 @@ class CIFTable:
 
 # TODO: @deprecated(version='1.1', reason='Use get_cif_tables() instead')
 def get_mmcif_tables(filename, table_names):
+    """Deprecated API.  Use get_cif_tables() instead."""
     return get_cif_tables(filename, table_names)

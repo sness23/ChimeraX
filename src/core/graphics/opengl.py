@@ -145,7 +145,7 @@ class OpenGLContext:
 
         # Create context
         from PyQt5.QtGui import QOpenGLContext
-        qc = QOpenGLContext(window)
+        qc = QOpenGLContext()
         qc.setScreen(self._screen)
 
         if self._share_context:
@@ -519,7 +519,7 @@ class Render:
 
     def framebuffer_depth_bits(self):
         return GL.glGetFramebufferAttachmentParameteriv(GL.GL_DRAW_FRAMEBUFFER,
-                                                        GL.GL_BACK_LEFT,
+                                                        GL.GL_DEPTH,
                                                         GL.GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE)
 
     def set_offscreen_color_bits(self, bits):
@@ -970,7 +970,9 @@ class Render:
         lines = ['vendor: %s' % GL.glGetString(GL.GL_VENDOR).decode('utf-8'),
                  'renderer: %s' % GL.glGetString(GL.GL_RENDERER).decode('utf-8'),
                  'version: %s' % GL.glGetString(GL.GL_VERSION).decode('utf-8'),
-                 'GLSL version: %s' % GL.glGetString(GL.GL_SHADING_LANGUAGE_VERSION).decode('utf-8')]
+                 'GLSL version: %s' % GL.glGetString(GL.GL_SHADING_LANGUAGE_VERSION).decode('utf-8'),
+                 'rgba bits: %d,%d,%d,%d' % self.framebuffer_rgba_bits(),
+                 'depth bits: %d' % self.framebuffer_depth_bits()]
         ne = GL.glGetIntegerv(GL.GL_NUM_EXTENSIONS)
         for e in range(ne):
             lines.append('extension: %s' % GL.glGetStringi(GL.GL_EXTENSIONS,e).decode('utf-8'))
@@ -1020,6 +1022,17 @@ class Render:
         stencil8_needed = (sys.platform.startswith('linux') and vendor and
                            vendor.startswith((b'AMD', b'ATI')))
 
+        #
+        # On macOS 10.14.5 with Radeon Pro Vega 20 or 16 graphics selection outlines
+        # are fragmented if rendering is to the default framebuffer.  The problem
+        # appears to be that copying the default framebuffer depth to the offscreen
+        # mask framebuffer does not work correctly.  So use offscreen rendering
+        # in this case.  ChimeraX bug #2216.
+        #
+        self.outline.offscreen_outline_needed = (
+            sys.platform.startswith('darwin') and
+            self.opengl_renderer().startswith('AMD Radeon Pro Vega'))
+        
     def pixel_scale(self):
         return self._opengl_context.pixel_scale()
 
@@ -1503,6 +1516,8 @@ class Multishadow:
         m = self._max_multishadows
         if m is None:
             m = GL.glGetIntegerv(GL.GL_MAX_UNIFORM_BLOCK_SIZE)      # OpenGL requires >= 16384.
+            if m > 2 ** 17:                                         # Limit maximum to limit size
+                m = 2 ** 17                                         #    of buffer in shader.
             m = m // 64                                             # 64 bytes per matrix.
             self._max_multishadows = m
         return m
@@ -1627,6 +1642,19 @@ class Silhouette:
                                  self.color, self.depth_jump,
                                  self.perspective_near_far_ratio)
 
+    def draw_silhouette(self, render):
+        r = render
+        fb = r.current_framebuffer()
+
+        # Can't have depth texture attached to framebuffer and sampled.
+        fb.attach_depth_texture(None)  # Detach depth texture
+        
+        self._draw_depth_outline(render, fb.depth_texture, self.thickness,
+                                 self.color, self.depth_jump,
+                                 self.perspective_near_far_ratio)
+
+        fb.attach_depth_texture(fb.depth_texture)  # Reattach depth texture
+
     def _silhouette_framebuffer(self, render):
         r = render
         size = r.render_size()
@@ -1665,6 +1693,10 @@ class Outline:
     def __init__(self, render):
         self._render = render
         self._mask_framebuf = None
+
+        # Copying depth from default framebuffer does not work for Radeon Pro Vega 20
+        # graphics on macOS 10.14.5.  This flag is to work around that bug.
+        self.offscreen_outline_needed = False
 
     def delete(self):
         fb = self._mask_framebuf
@@ -1764,6 +1796,7 @@ class BlendTextures:
             self._background_cleared = False
         else:
             r.draw_background()
+            self._background_cleared = True
         GL.glEnable(GL.GL_BLEND)
         GL.glBlendFuncSeparate(GL.GL_ONE, GL.GL_ONE, GL.GL_ONE, GL.GL_ONE_MINUS_SRC_ALPHA)
         
@@ -1941,10 +1974,7 @@ class Framebuffer:
             self._draw_buffer = GL.GL_NONE
 
         if isinstance(depth_buf, Texture):
-            level = 0
-            GL.glFramebufferTexture2D(GL.GL_FRAMEBUFFER,
-                                      GL.GL_DEPTH_ATTACHMENT, GL.GL_TEXTURE_2D,
-                                      depth_buf.id, level)
+            self.attach_depth_texture(depth_buf)
         elif depth_buf is not None:
             GL.glFramebufferRenderbuffer(GL.GL_FRAMEBUFFER,
                                          GL.GL_DEPTH_ATTACHMENT,
@@ -1976,6 +2006,13 @@ class Framebuffer:
         self.width = w
         self.height = h
         self.viewport = (0,0,w,h)
+
+    def attach_depth_texture(self, depth_texture):
+        tid = 0 if depth_texture is None else depth_texture.id
+        level = 0
+        GL.glFramebufferTexture2D(GL.GL_FRAMEBUFFER,
+                                  GL.GL_DEPTH_ATTACHMENT, GL.GL_TEXTURE_2D,
+                                  tid, level)
 
     def __del__(self):
         if not self._deleted and self._fbo != 0:
@@ -2415,14 +2452,23 @@ class Buffer:
         self.instance_buffer = t.instance_buffer
         self.requires_capabilities = t.requires_capabilities
 
+        self._deleted_buffer = False
+        
     def __del__(self):
-        if self.opengl_buffer is not None:
+        if not self._deleted_buffer:
             raise OpenGLError('OpenGL buffer "%s" was not deleted before core.graphics.Buffer destroyed'
                                % self.shader_variable_name)
 
     def delete_buffer(self):
         'Delete the OpenGL buffer object.'
+        self._deleted_buffer = True
+        self.release_buffer()
 
+    def release_buffer(self):
+        '''
+        Releases OpenGL buffer and array data, but Buffer can still be used
+        by calling update_buffer_data() to recreate it.
+        '''
         if self.opengl_buffer is None:
             return
         GL.glDeleteBuffers(1, [self.opengl_buffer])
@@ -2462,11 +2508,14 @@ class Buffer:
         Update the buffer with data supplied by a numpy array and bind it to
         the associated shader variable.  Return true if the buffer is deleted and replaced.
         '''
+        if self._deleted_buffer:
+            raise RuntimeError('Attempt to update a deleted buffer')
+        
         bdata = self.buffered_data
         replace_buffer = (data is None or bdata is None
                           or data.shape != bdata.shape)
         if replace_buffer:
-            self.delete_buffer()
+            self.release_buffer()
 
         if data is not None:
             b = GL.glGenBuffers(1) if replace_buffer else self.opengl_buffer

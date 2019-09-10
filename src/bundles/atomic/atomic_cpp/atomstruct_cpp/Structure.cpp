@@ -304,8 +304,7 @@ void Structure::_copy(Structure* s) const
             s->_position[i][j] = _position[i][j];
 
     std::map<Residue*, Residue*> rmap;
-    for (auto ri = residues().begin() ; ri != residues().end() ; ++ri) {
-        Residue* r = *ri;
+    for (auto r: residues()) {
         Residue* cr = s->new_residue(r->name(), r->chain_id(), r->number(), r->insertion_code());
         cr->set_mmcif_chain_id(r->mmcif_chain_id());
         cr->set_ribbon_display(r->ribbon_display());
@@ -329,8 +328,7 @@ void Structure::_copy(Structure* s) const
     s->set_active_coord_set(cs_map[active_coord_set()]);
 
     std::map<Atom*, Atom*> amap;
-    for (auto ai = atoms().begin() ; ai != atoms().end() ; ++ai) {
-        Atom* a = *ai;
+    for (auto a: atoms()) {
         Atom* ca = s->new_atom(a->name(), a->element());
         Residue *cr = rmap[a->residue()];
         cr->add_atom(ca);	// Must set residue before setting alt locs
@@ -356,14 +354,30 @@ void Structure::_copy(Structure* s) const
         amap[a] = ca;
     }
     
-    for (auto bi = bonds().begin() ; bi != bonds().end() ; ++bi) {
-        Bond* b = *bi;
+    for (auto b: bonds()) {
         const Bond::Atoms& a = b->atoms();
         Bond* cb = s->new_bond(amap[a[0]], amap[a[1]]);
         cb->set_display(b->display());
         cb->set_color(b->color());
         cb->set_halfbond(b->halfbond());
         cb->set_radius(b->radius());
+    }
+
+    if (_chains != nullptr) {
+        s->_chains = new Chains();
+        for (auto c: chains()) {
+            auto cc = s->_new_chain(c->chain_id(), c->polymer_type());
+            StructureSeq::Residues bulk_residues;
+            for (auto r: c->residues()) {
+                if (r == nullptr)
+                    bulk_residues.push_back(nullptr);
+                else
+                    bulk_residues.push_back(rmap[r]);
+            }
+            cc->bulk_set(bulk_residues, &c->contents());
+            cc->set_circular(c->circular());
+            cc->set_from_seqres(c->from_seqres());
+        }
     }
 
     // Copy pseudobond groups.
@@ -444,6 +458,8 @@ Structure::_delete_atom(Atom* a)
     // if we're a backbone atom connecting to a backbone atom in an "adjacent" residue,
     // need to insert missing-structure pseudobond. "adjacent" considers missing-structure
     // pseudobonds
+    if (a->_rings.size() > 0)
+        _recompute_rings = true;
     if (a->is_backbone(BBE_MIN)) {
         std::vector<Atom*> missing_partners;
         auto pbg = _pb_mgr.get_group(PBG_MISSING_STRUCTURE, AS_PBManager::GRP_NONE);
@@ -622,6 +638,8 @@ Structure::_delete_atoms(const std::set<Atom*>& atoms, bool verify)
     std::set<Bond*> del_bonds;
     std::set<Atom*> bond_losers;
     for (auto a: atoms) {
+        if (a->_rings.size() > 0)
+            _recompute_rings = true;
         for (auto b: a->bonds()) {
             del_bonds.insert(b);
             auto oa = b->other_atom(a);
@@ -684,6 +702,60 @@ Structure::_delete_atoms(const std::set<Atom*>& atoms, bool verify)
     set_gc_shape();
     set_gc_adddel();
     _idatm_valid = false;
+}
+
+void
+Structure::_form_chain_check(Atom* a1, Atom* a2, Bond* b)
+{
+    // If initial construction is over (i.e. Python instance exists) and make_chains()
+    // has been called (i.e. _chains is not null), then need to check if new bond
+    // or missing-structure pseudobond creates a chain or coalesces chain fragments
+    if (_chains == nullptr || py_instance(false) == Py_None)
+        return;
+    Residue* start_r;
+    Residue* other_r;
+    if (b == nullptr) {
+        // missing structure pseudobond; need to pass through residue list to determine
+        // relative ordering of the residues
+        for (auto r: residues()) {
+            if (r == a1->residue()) {
+                start_r = a1->residue();
+                other_r = a2->residue();
+                break;
+            }
+            if (r == a2->residue()) {
+                start_r = a2->residue();
+                other_r = a1->residue();
+                break;
+            }
+        }
+    } else {
+        auto start_a = b->polymeric_start_atom();
+        if (start_a == nullptr)
+            return;
+        start_r = start_a->residue();
+        other_r = b->other_atom(start_a)->residue();
+    }
+    if (start_r->chain() == nullptr) {
+        if (other_r->chain() == nullptr) {
+            // form a new chain based on start residue's chain ID
+            auto chain = _new_chain(start_r->chain_id(), Sequence::rname_polymer_type(start_r->name()));
+            chain->push_back(start_r);
+            chain->push_back(other_r);
+        } else {
+            // incorporate start_r into other_r's chain
+            other_r->chain()->push_front(start_r);
+        }
+    } else {
+        if (other_r->chain() == nullptr) {
+            // incorporate other_r into start_r's chain
+            start_r->chain()->push_back(other_r);
+        } else if (start_r->chain() != other_r->chain()) {
+            // merge other_r's chain into start_r's chain
+            // and demote other_r's chain to a plain sequence
+            *start_r->chain() += *other_r->chain();
+        }
+    }
 }
 
 void
@@ -760,6 +832,8 @@ Structure::delete_bond(Bond *b)
     set_gc_adddel();
     _structure_cats_dirty = true;
     _idatm_valid = false;
+    if (b->_rings.size() > 0)
+        _recompute_rings = true;
     delete b;
 }
 
@@ -1637,6 +1711,7 @@ Structure::set_active_coord_set(CoordSet *cs)
             set_gc_shape();
             set_gc_ribbon();
             change_tracker()->add_modified(this, this, ChangeTracker::REASON_ACTIVE_COORD_SET);
+            change_tracker()->add_modified(this, this, ChangeTracker::REASON_SCENE_COORD);
         }
     }
 }
@@ -1715,6 +1790,7 @@ Structure::set_position_matrix(double* pos)
     double *_pos = &_position[0][0];
     for (int i=0; i<12; ++i)
         *_pos++ = *pos++;
+    change_tracker()->add_modified(this, this, ChangeTracker::REASON_SCENE_COORD);
 }
 
 void

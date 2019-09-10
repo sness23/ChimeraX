@@ -90,7 +90,9 @@ class View:
             r.lighting = self._lighting
             r.material = self._material
             r.silhouette = self._silhouette
-            self.highlight_thickness = opengl_context.pixel_scale()
+            pscale = opengl_context.pixel_scale()
+            self.silhouette.thickness = pscale
+            self.highlight_thickness = pscale
         elif opengl_context is r.opengl_context:
             # OpenGL context switched between stereo and mono mode
             self._opengl_initialized = False
@@ -166,8 +168,9 @@ class View:
         camera.combine_rendered_camera_views(r)
 
         if self._overlays:
+            odrawings = sum([o.all_drawings(displayed_only = True) for o in self._overlays], [])
             from .drawing import draw_overlays
-            draw_overlays(self._overlays, r)
+            draw_overlays(odrawings, r)
 
         if use_calllist:
             gllist.call_opengl_list(self, trace=True)
@@ -189,7 +192,11 @@ class View:
                        len(transparent_drawings) == 0 and
                        len(highlight_drawings) == 0 and
                        len(on_top_drawings) == 0)
-        offscreen = r.offscreen
+
+        offscreen = r.offscreen if r.offscreen.enabled else None
+        if highlight_drawings and r.outline.offscreen_outline_needed:
+            offscreen = r.offscreen
+            
         silhouette = self.silhouette
         shadow, multishadow = self._compute_shadowmaps(opaque_drawings + transparent_drawings, camera)
         
@@ -199,7 +206,7 @@ class View:
             if no_drawings:
                 r.draw_background()
                 continue
-            if offscreen.enabled:
+            if offscreen:
                 offscreen.start(r)
             if silhouette.enabled:
                 silhouette.start_silhouette_drawing(r)
@@ -226,7 +233,11 @@ class View:
                 draw_opaque(r, opaque_drawings)
             if highlight_drawings:
                 r.outline.set_outline_mask()       # copy depth to outline framebuffer
-            draw_transparent(r, transparent_drawings)
+            if transparent_drawings:
+                if silhouette.enabled:
+                    # Draw opaque object silhouettes behind transparent surfaces
+                    silhouette.draw_silhouette(r)
+                draw_transparent(r, transparent_drawings)
             self._finish_timing()
             if multishadow:
                 r.allow_equal_depth(False)
@@ -237,7 +248,7 @@ class View:
                                        pixel_width = self._highlight_width)
             if on_top_drawings:
                 draw_on_top(r, on_top_drawings)
-            if offscreen.enabled:
+            if offscreen:
                 offscreen.finish(r)
 
                 
@@ -385,12 +396,13 @@ class View:
         '''The current list of overlay Drawings.'''
         return self._overlays
 
-    def remove_overlays(self, overlays=None):
+    def remove_overlays(self, overlays=None, delete = True):
         '''Remove the specified overlay Drawings.'''
         if overlays is None:
             overlays = self._overlays
-        for o in overlays:
-            o.delete()
+        if delete:
+            for o in overlays:
+                o.delete()
         oset = set(overlays)
         self._overlays = [o for o in self._overlays if o not in oset]
         self.redraw_needed = True
@@ -550,7 +562,7 @@ class View:
 
     def _shadow_bounds(self, drawings):
         if drawings is None:
-            b = self.drawing_bounds()
+            b = self.drawing_bounds(allow_drawing_changes = False)
             sdrawings = [self.drawing]
         else:
             sdrawings = [d for d in drawings if getattr(d, 'casts_shadows', True)]
@@ -567,13 +579,14 @@ class View:
             return 0	# OpenGL not available
         return self._render.multishadow.max_multishadows()
 
-    def drawing_bounds(self, clip=False, cached_only=False):
+    def drawing_bounds(self, clip=False, cached_only=False, allow_drawing_changes=True):
         '''Return bounds of drawing, displayed part only.'''
         dm = self._drawing_manager
         if cached_only:
             return dm.cached_drawing_bounds
-        # Cause graphics update so bounds include changes in models.
-        self.check_for_drawing_change()
+        if allow_drawing_changes:
+            # Cause graphics update so bounds include changes in models.
+            self.check_for_drawing_change()
         b = dm.cached_drawing_bounds
         if b is None:
             dm.cached_drawing_bounds = b = self.drawing.bounds()
@@ -821,7 +834,7 @@ class View:
         return cnear, cfar
 
     def _near_far_bounds(self, camera_pos, view_dir):
-        b = self.drawing_bounds()
+        b = self.drawing_bounds(allow_drawing_changes = False)
         if b is None:
             return self._min_near_fraction, 1  # Nothing shown
         from ..geometry import inner_product

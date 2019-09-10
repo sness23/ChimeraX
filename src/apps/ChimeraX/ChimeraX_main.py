@@ -726,9 +726,11 @@ def init(argv, event_loop=True):
     from chimerax.core import errors, commands
     for arg in args:
         try:
-            commands.run(sess, 'open %s' % arg)
-        except (IOError, errors.UserError) as e:
+            from chimerax.core.commands import quote_if_necessary
+            commands.run(sess, 'open %s' % quote_if_necessary(arg))
+        except (IOError, errors.NotABug) as e:
             sess.logger.error(str(e))
+            return os.EX_SOFTWARE
         except Exception as e:
             import traceback
             traceback.print_exc()

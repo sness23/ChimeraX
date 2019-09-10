@@ -101,7 +101,6 @@ class ToolbarTool(ToolInstance):
     def _build_buttons(self):
         import os
         import chimerax.shortcuts
-        from PyQt5.QtCore import Qt
         from PyQt5.QtGui import QPixmap, QIcon
         shortcut_icon_dir = os.path.join(chimerax.shortcuts.__path__[0], 'icons')
         dir_path = os.path.join(os.path.dirname(__file__), 'icons')
@@ -127,8 +126,6 @@ class ToolbarTool(ToolInstance):
                         if not os.path.exists(icon_path):
                             icon_path = os.path.join(dir_path, icon_file)
                     pm = QPixmap(icon_path)
-                    # Toolbutton will scale down, but not up, so give large icons
-#                    icon = QIcon(pm.scaledToHeight(128, Qt.SmoothTransformation))
                     icon = QIcon(pm)
                     if not tooltip:
                         tooltip = descrip
@@ -140,12 +137,35 @@ class ToolbarTool(ToolInstance):
                         tab, section, descrip,
                         lambda e, what=what, self=self: self.handle_scheme(what),
                         icon, tooltip, **kw)
+        # add buttons from toolbar manager
+        for tab, tab_info in self.session.toolbar._toolbar.items():
+            if tab.startswith("hidden"):
+                continue
+            # TODO: compact
+            for section, section_info in tab_info.items():
+                for display_name, args in section_info.items():
+                    (name, bundle_info, icon_path, description, kw) = args
+                    if description and not description[0].isupper():
+                        description = description.capitalize()
+                    pm = QPixmap(icon_path)
+                    icon = QIcon(pm)
+
+                    def callback(event, session=self.session, name=name, bundle_info=bundle_info, display_name=display_name):
+                        bundle_info.run_provider(session, name, session.toolbar, display_name=display_name)
+                    # TODO: vr_mode
+                    self.ttb.add_button(
+                            tab, section, display_name, callback,
+                            icon, description, **kw)
         self.ttb.show_tab('Home')
+
 
 def _file_open(session):
     session.ui.main_window.file_open_cb(session)
+
+
 def _file_save(session):
     session.ui.main_window.file_save_cb(session)
+
 
 _Toolbars = {
     "Home": (
@@ -154,8 +174,8 @@ _Toolbars = {
             ("File", False): [
                 (_file_open, "open-in-app.png", "Open", "Open data file"),
                 (_file_save, "content-save.png", "Save", "Save session file"),
-                #("cmd:close session", "close-box.png", "Close", "Close current session"),
-                #("cmd:exit", "exit.png", "Exit", "Exit application"),
+                # ("cmd:close session", "close-box.png", "Close", "Close current session"),
+                # ("cmd:exit", "exit.png", "Exit", "Exit application"),
             ],
             ("Images", False): [
                 ("shortcut:sx", "camera.png", "Snapshot", "Save snapshot to desktop"),
@@ -183,10 +203,10 @@ _Toolbars = {
                 ("shortcut:la", "softlight.png", "Soft", "Ambient lighting"),
                 ("shortcut:lf", "fulllight.png", "Full", "Full lighting"),
             ],
-#            ("Undo", True): [
-#                ("cmd:undo", "undo-variant.png", "Undo", "Undo last action"),
-#                ("cmd:redo", "redo-variant.png", "Redo", "Redo last action"),
-#            ],
+            # ("Undo", True): [
+            #     ("cmd:undo", "undo-variant.png", "Undo", "Undo last action"),
+            #     ("cmd:redo", "redo-variant.png", "Redo", "Redo last action"),
+            # ],
         },
     ),
     "Molecule Display": (
@@ -208,10 +228,6 @@ _Toolbars = {
                 ("shortcut:st", "stick.png", "Stick", "Display atoms in stick style"),
                 ("shortcut:sp", "sphere.png", "Sphere", "Display atoms in sphere style"),
                 ("shortcut:bs", "ball.png", "Ball && stick", "Display atoms in ball and stick style"),
-                ("cmd:nucleotides selAtoms atoms; style nucleic & selAtoms stick", "nuc-atoms.png", "Plain", "Remove nucleotides styling", {'group': 'nuc'}),
-                ("cmd:nucleotides selAtoms fill; style nucleic & selAtoms stick", "nuc-fill.png", "Filled", "Show nucleotides with filled rings", {'group': 'nuc'}),
-                ("cmd:nucleotides selAtoms tube/slab shape box", "nuc-box.png", "Tube/\nSlab", "Show nucleotide bases as boxes and sugars as tubes", {'group': 'nuc'}),
-                ("cmd:nucleotides selAtoms ladder", "nuc-ladder.png", "Ladder", "Show nucleotides as H-bond ladders", {'group': 'nuc'}),
             ],
             ("Coloring", False): [
                 ("shortcut:ce", "colorbyelement.png", "heteroatom", "Color non-carbon atoms by element"),
@@ -219,31 +235,12 @@ _Toolbars = {
                 ("shortcut:rB", "rainbow.png", "rainbow", 'Rainbow color N to C-terminus'),
                 ("shortcut:bf", "bfactor.png", "b-factor", 'Color by b-factor'),
                 ("shortcut:hp", "hydrophobicity.png", "hydrophobic", 'Color surface by hydrophobicity'),
-                ("cmd:color selAtoms bynuc", "nuc-color.png", "nucleotide", "Color by nucleotide"),
             ],
             ("Analysis", False): [
                 ("shortcut:hb", "hbondsflat.png", "H-bonds", "Show hydrogen bonds"),
                 ("shortcut:HB", "hbondsflathide.png", "Hide H-bonds", "Hide hydrogen bonds"),
                 ("shortcut:sq", "sequence.png", "Sequence", "Show polymer sequence"),
                 ("shortcut:if", "interfaces.png", "Interfaces", "Show chain contacts diagram"),
-            ],
-        },
-    ),
-    "Nucleotides": (
-        None,
-        {
-            ("Styles", False): [
-                ("cmd:nucleotides selAtoms atoms; style nucleic & selAtoms stick", "nuc-atoms.png", "Plain", "Remove nucleotides styling"),
-                ("cmd:nucleotides selAtoms fill; style nucleic & selAtoms stick", "nuc-fill.png", "Filled", "Show nucleotides with filled rings"),
-                ("cmd:nucleotides selAtoms slab; style nucleic & selAtoms stick", "nuc-slab.png", "Slab", "Show nucleotide bases as slabs and fill sugars"),
-                ("cmd:nucleotides selAtoms tube/slab shape box", "nuc-box.png", "Tube/\nSlab", "Show nucleotide bases as boxes and sugars as tubes"),
-                ("cmd:nucleotides selAtoms tube/slab shape ellipsoid", "nuc-elli.png", "Tube/\nEllipsoid", "Show nucleotide bases as ellipsoids and sugars as tubes"),
-                ("cmd:nucleotides selAtoms tube/slab shape muffler", "nuc-muff.png", "Tube/\nMuffler", "Show nucleotide bases as mufflers and sugars as tubes"),
-                ("cmd:nucleotides selAtoms ladder", "nuc-ladder.png", "Ladder", "Show nucleotides as H-bond ladders"),
-                ("cmd:nucleotides selAtoms stubs", "nuc-stubs.png", "Stubs", "Show nucleotides as stubs"),
-            ],
-            ("Coloring", False): [
-                ("cmd:color selAtoms bynuc", "nuc-color.png", "nucleotide", "Color by nucleotide"),
             ],
         },
     ),
@@ -264,8 +261,10 @@ _Toolbars = {
                 ("shortcut:se", "silhouette.png", "Silhouettes", "Toggle silhouettes"),
             ],
             ("Camera", False): [
+                ("shortcut:vs", "viewsel.png", "View selected", "View selected"),
                 ("shortcut:va", "viewall.png", "View all", "View all"),
                 ("shortcut:dv", "orient.png", "Orient", "Default orientation"),
+                ("cmd:tool show 'Side View'", "sideview.png", "Side view", "Show side view tool"),
             ],
         }
     ),
@@ -306,6 +305,24 @@ _Toolbars = {
             ],
         }
     ),
+    "Markers": (
+        "help:user/tools/markerplacement.html",
+        {
+            ("Place markers", False): [
+                ("mouse:mark maximum", None, "Maximum", "Mark maximum"),
+                ("mouse:mark plane", None, "Plane", "Mark volume plane"),
+                ("mouse:mark surface", None, "Surface", "Mark surface"),
+                ("mouse:mark center", None, "Center", "Mark center of connected surface"),
+                ("mouse:mark point", None, "Point", "Mark 3d point"),
+            ],
+            ("Adjust markers", False): [
+                ("mouse:link markers", None, "Link", "Link consecutively clicked markers"),
+                ("mouse:move markers", None, "Move", "Move markers"),
+                ("mouse:resize markers", None, "Resize", "Resize markers or links"),
+                ("mouse:delete markers", None, "Delete", "Delete markers or links"),
+            ],
+        }
+    ),
     "Right Mouse": (
         "help:user/tools/mousemodes.html",
         {
@@ -332,7 +349,6 @@ _Toolbars = {
                 ("mouse:contour level", None, "Contour level", "Adjust volume data threshold level"),
                 ("mouse:move planes", None, "Move planes", "Move plane or slab along its axis to show a different section"),
                 ("mouse:crop volume", None, "Crop", "Crop volume data dragging any face of box outline"),
-                ("mouse:place marker", None, "Place marker", None),
                 ("mouse:pick blobs", None, "Blob", "Measure and color connected parts of surface"),
                 ("mouse:map eraser", None, "Erase", "Erase parts of a density map setting values in a sphere to zero"),
                 ("mouse:play map series", None, "Play series", "Play map series"),

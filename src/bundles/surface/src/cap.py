@@ -21,16 +21,25 @@ def update_clip_caps(view):
                 (view.camera.redraw_needed and cp.have_camera_plane()))))
     # TODO: Update caps only on specific drawings whose shape changed.
     if update:
-        drawings = view.drawing.all_drawings()
-        show_surface_clip_caps(planes, drawings, offset = settings.clipping_cap_offset)
+        drawings = view.drawing.all_drawings(displayed_only = True)
+        show_surface_clip_caps(planes, drawings,
+                               offset = settings.clipping_cap_offset,
+                               subdivision = settings.clipping_cap_subdivision)
 
-def show_surface_clip_caps(planes, drawings, offset = 0.01):
+def show_surface_clip_caps(planes, drawings, offset = 0.01, subdivision = 0.0):
     for p in planes:
         for d in drawings:
             # Clip only drawings that have "clip_cap" attribute true.
             if (hasattr(d, 'clip_cap') and d.clip_cap and
                 d.triangles is not None and not hasattr(d, 'clip_cap_owner')):
                 varray, narray, tarray = compute_cap(d, p, offset)
+                if subdivision > 0 and tarray is not None:
+                    from . import refine_mesh
+                    varray, tarray = refine_mesh(varray, tarray, subdivision)
+                    if len(narray) > 0:
+                        normal = narray[0,:]
+                        narray = varray.copy()
+                        narray[:] = normal
                 set_cap_drawing_geometry(d, p.name, varray, narray, tarray)
 
     # Remove caps for clip planes that are gone.
@@ -59,7 +68,7 @@ def remove_clip_caps(drawings):
 def compute_cap(drawing, plane, offset):
     # Undisplay cap for drawing with no geometry shown.
     d = drawing
-    if not d.display:
+    if not d.display or not d.parents_displayed:
         return None, None, None
 
     # Handle surfaces with duplicate vertices, such as molecular

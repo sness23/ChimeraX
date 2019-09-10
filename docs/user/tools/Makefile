@@ -29,7 +29,7 @@ MOUSEICONS = $(TOP)/src/bundles/mouse_modes/src/icons/*.png \
 		$(TOP)/src/bundles/map/src/crop.png \
 		$(TOP)/src/bundles/map/src/windowing.png \
 		$(TOP)/src/bundles/map_series/src/vseries.png \
-		$(TOP)/src/bundles/markers/src/icons/marker.png \
+		$(TOP)/src/bundles/markers/src/icons/*.png \
 		$(TOP)/src/bundles/swapaa/src/swapaa.png \
 		$(TOP)/src/bundles/tug/src/minimize.png \
 		$(TOP)/src/bundles/tug/src/tug.png \
@@ -41,8 +41,12 @@ SHORTCUTICONS = $(TOP)/src/bundles/shortcuts/src/icons/*.png
 SICONDIR = $(DOCDIR)/shortcut-icons
 TOOLBARICONS = $(TOP)/src/bundles/toolbar/src/icons/*.png
 TICONDIR = $(DOCDIR)/toolbar-icons
+NUCICONS = $(TOP)/src/bundles/nucleotides/src/icons/*.png
+NICONDIR = $(DOCDIR)/nuc-icons
 BASICICONS = $(TOP)/src/bundles/basic_actions/src/lib/*.svg
 BICONDIR = $(DOCDIR)/basic-icons
+UIICONS = $(TOP)/src/bundles/ui/src/icons/*.png
+UICONDIR = $(DOCDIR)/ui-icons
 
 install:
 	if [ ! -d "$(DOCDIR)" ]; then mkdir -p $(DOCDIR); fi
@@ -53,7 +57,11 @@ install:
 	$(RSYNC) $(SHORTCUTICONS) $(SICONDIR)
 	if [ ! -d "$(TICONDIR)" ]; then mkdir -p $(TICONDIR); fi
 	$(RSYNC) $(TOOLBARICONS) $(TICONDIR)
-	if [ ! -d "$(BICONDIR)" ]; then mkdir -p $(SICONDIR); fi
+	if [ ! -d "$(NICONDIR)" ]; then mkdir -p $(NICONDIR); fi
+	$(RSYNC) $(NUCICONS) $(NICONDIR)
+	if [ ! -d "$(BICONDIR)" ]; then mkdir -p $(BICONDIR); fi
 	$(RSYNC) $(BASICICONS) $(BICONDIR)
+	if [ ! -d "$(UICONDIR)" ]; then mkdir -p $(UICONDIR); fi
+	$(RSYNC) $(UIICONS) $(UICONDIR)
 
 clean:

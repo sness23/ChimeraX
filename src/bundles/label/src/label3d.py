@@ -15,7 +15,7 @@
 # -----------------------------------------------------------------------------
 #
 def label(session, objects = None, object_type = None, text = None,
-          offset = None, color = None, background = None,
+          offset = None, color = None, bg_color = None,
           size = None, height = None, font = None, on_top = None):
     '''Create atom labels. The belong to a child model named "labels" of the structure.
 
@@ -33,7 +33,7 @@ def label(session, objects = None, object_type = None, text = None,
     color : Color or "default"
       Color of the label text.  If no color is specified black is used on light backgrounds
       and white is used on dark backgrounds.
-    background : Color or "none"
+    bg_color : Color or "none"
       Draw rectangular label background in this color, or if "none", background is transparent.
     size : int or "default"
       Font size in points (1/72 inch). Default 24.
@@ -70,9 +70,9 @@ def label(session, objects = None, object_type = None, text = None,
         settings['color'] = color.uint8x4()
     elif color == 'default':
         settings['color'] = None
-    if isinstance(background, Color):
-        settings['background'] = background.uint8x4()
-    elif background == 'none':
+    if isinstance(bg_color, Color):
+        settings['background'] = bg_color.uint8x4()
+    elif bg_color == 'none':
         settings['background'] = None
     if size == 'default':
         settings['size'] = 24
@@ -194,6 +194,21 @@ def labeled_objects_by_model(session, otype):
     oclass = label_object_class(otype)
     return [(lm.parent, lm.labeled_objects(oclass))
             for lm in session.models.list(type = ObjectLabels)]
+
+# -----------------------------------------------------------------------------
+#
+def label_objects(objects, object_types = ['atoms', 'residues', 'pseudobonds', 'bonds']):
+    lobjects = []
+    lmodels = set()
+    for otype in object_types:
+        for m, lbl_objects in objects_by_model(objects, otype):
+            lm = labels_model(m)
+            if lm is not None:
+                lo = lm.labels(lbl_objects)
+                if lo:
+                    lobjects.extend(lo)
+                    lmodels.add(lm)
+    return lmodels, lobjects
         
 # -----------------------------------------------------------------------------
 #
@@ -226,7 +241,7 @@ def register_label_command(logger):
                    keyword = [('text', Or(DefArg, StringArg)),
                               ('offset', Or(DefArg, Float3Arg)),
                               ('color', Or(DefArg, ColorArg)),
-                              ('background', Or(NoneArg, ColorArg)),
+                              ('bg_color', Or(NoneArg, ColorArg)),
                               ('size', Or(DefArg, IntArg)),
                               ('height', Or(EnumOf(['fixed']), FloatArg)),
                               ('font', StringArg),
@@ -252,6 +267,7 @@ class ObjectLabels(Model):
     '''Model holding labels appearing next to atoms, residues, pseudobonds or bonds.'''
 
     pickable = False		# Don't allow mouse selection of labels
+    casts_shadows = False
     
     def __init__(self, session):
         Model.__init__(self, 'labels', session)
@@ -307,9 +323,14 @@ class ObjectLabels(Model):
     def _set_single_color(self, color):
         for ld in self._labels:
             ld.color = color
-        self._texture_needs_update = True
-        self.redraw_needed()
+        self.update_labels()
     single_color = property(_get_single_color, _set_single_color)
+
+    def labels(self, objects = None):
+        if objects is None:
+            self._labels
+        ol = self._object_label
+        return [ol[o] for o in objects if o in ol]
     
     def add_labels(self, objects, label_class, view, settings = {}, on_top = None):
         if on_top is not None:
@@ -325,8 +346,11 @@ class ObjectLabels(Model):
                     setattr(lo, k, v)
         self._count_pixel_sized_labels()
         if objects:
-            self._texture_needs_update = True
-            self.redraw_needed()
+            self.update_labels()
+
+    def update_labels(self):
+        self._texture_needs_update = True
+        self.redraw_needed()
             
     def _count_pixel_sized_labels(self):
         self._num_pixel_labels = len([l for l in self._labels if l.height is None])
@@ -494,6 +518,14 @@ class ObjectLabels(Model):
         from numpy import array, int32
         ta = array(tlist, int32)
         return ta
+
+    def picked_label(self, triangle_number):
+        lnum = triangle_number//2
+        vlabels = [l for l in self._labels if l.visible()]
+        if lnum < len(vlabels):
+            return vlabels[lnum]
+        return None
+        
         
     SESSION_SAVE = True
     
@@ -549,9 +581,6 @@ def label_class(object):
 #
 class ObjectLabel:
 
-    pickable = False		# Don't allow mouse selection of labels
-    casts_shadows = False
-    
     def __init__(self, object, view, offset = None, text = None,
                  color = None, background = None,
                  size = 48, height = 0.7, font = 'Arial'):
@@ -728,3 +757,28 @@ class BondLabel(EdgeLabel):
 #
 class PseudobondLabel(EdgeLabel):
     pass
+
+# -----------------------------------------------------------------------------
+#
+def picked_3d_label(session, win_x, win_y):
+    xyz1, xyz2 = session.main_view.clip_plane_points(win_x, win_y)
+    if xyz1 is None or xyz2 is None:
+        return None
+    pick = None
+    from chimerax.core.graphics import PickedTriangle
+    for m in session.models.list(type = ObjectLabels):
+        mtf = m.parent.scene_position.inverse()
+        mxyz1, mxyz2 =  mtf*xyz1, mtf*xyz2
+        p = m.first_intercept(mxyz1, mxyz2)
+        if isinstance(p, PickedTriangle) and (pick is None or p.distance < pick.distance):
+            pick = p
+
+    if pick:
+        # Return ObjectLabel instance
+        lmodel = pick.drawing()
+        lobject = lmodel.picked_label(pick.triangle_number)
+        if lobject:
+            lobject._label_model = lmodel
+            return lobject
+
+    return None

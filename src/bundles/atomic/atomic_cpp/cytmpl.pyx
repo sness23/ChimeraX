@@ -44,7 +44,10 @@ cdef class TmplResidue:
 
     @property
     def chief(self):
-        return self.cpp_res.chief().py_instance(True)
+        chief_ptr = self.cpp_res.chief()
+        if chief_ptr:
+            return chief_ptr.py_instance(True)
+        return None
 
     def find_atom(self, atom_name):
         '''Return the TmplAtom with the given name in this residue (or None if non-existent)'''
@@ -55,17 +58,20 @@ cdef class TmplResidue:
 
     @staticmethod
     def get_template(res_name, *, start=False, end=False):
-        '''Return the TmplResidue with the given name (or raise ValueError if no such template).
-           start/end, if True, return a template residue for the corresponding chain terminus.
+        '''Return the TmplResidue with the given name (or None if no such template).
+           'start/end', if True, return a template residue for the corresponding chain terminus.
         '''
         tmpl_res = cytmpl.find_template_residue(res_name.encode(), start, end)
         if not tmpl_res:
-            raise ValueError("No template for residue type %s" % res_name)
+            return None
         return tmpl_res.py_instance(True)
 
     @property
     def link(self):
-        return self.cpp_res.link().py_instance(True)
+        link_ptr = self.cpp_res.link()
+        if link_ptr:
+            return link_ptr.py_instance(True)
+        return None
 
     @property
     def link_atoms(self):
@@ -143,6 +149,10 @@ cdef class TmplBond:
     @property
     def atoms(self):
         return [self.cpp_bond.atoms()[0].py_instance(True), self.cpp_bond.atoms()[1].py_instance(True)]
+
+    @property
+    def length(self):
+        return self.cpp_bond.length()
 
     def other_atom(self, TmplAtom a):
         return self.cpp_bond.other_atom(a.cpp_atom).py_instance(True)

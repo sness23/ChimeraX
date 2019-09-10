@@ -195,7 +195,7 @@ class Volume(Model):
     Supported API.  Remove a list of VolumeSurface instances from this Volume.
     If surfaces is None then all current surfaces are removed.
     '''
-    surfs = self._surfaces if surfaces is None else surfaces
+    surfs = tuple(self._surfaces if surfaces is None else surfaces)
     if self.id is None:
       self.remove_drawings(surfs)
     else:
@@ -501,9 +501,9 @@ class Volume(Model):
     if mstats is None:
       mstats = self.matrix_value_statistics()
     if mfrac is None:
-      v = mstats.rank_data_value(1-vfrac[0])
+      v = mstats.rank_data_value(1-vfrac[0], estimate = 'high')
     else:
-      v = mstats.mass_rank_data_value(1-mfrac[0])
+      v = mstats.mass_rank_data_value(1-mfrac[0], estimate = 'high')
     rgba = self.default_rgba
     binary = getattr(self.data, 'binary', False)
     polar = getattr(self.data, 'polar_values', False)
@@ -565,6 +565,8 @@ class Volume(Model):
     '''
     Set display style to "surface", "mesh", or "image".
     '''
+    self._style_when_shown = None
+
     if style == 'image' and self.image_shown and not self.surface_shown:
       return
     if (style in ('surface', 'mesh') and self.surface_shown
@@ -583,8 +585,6 @@ class Volume(Model):
       ijk_min, ijk_max = self.region[:2]
       self.new_region(ijk_min, ijk_max)
 
-    self._style_when_shown = None
-    
     # Show or hide surfaces
     surfshow = (style in ('surface', 'mesh'))
     mesh = (style == 'mesh')
@@ -647,7 +647,7 @@ class Volume(Model):
   def _set_display(self, display):
     if display == self.display:
       return
-    Model._set_display(self, display)
+    Model.display.fset(self, display)
     if display:
       self._drawings_need_update()	# Create model geometry if needed.
     self.call_change_callbacks('displayed')
@@ -875,12 +875,18 @@ class Volume(Model):
 
     if copy_colors:
       # Copy colors
+
+      color_kw = {}
+      if len(self.surfaces) == len(v.surfaces):
+        color_kw['surface_colors'] = [s.rgba for s in v.surfaces]
+      if len(self.image_colors) == len(v.image_colors):
+        color_kw['image_colors'] = v.image_colors
+
       self.set_parameters(
-        surface_colors = [s.rgba for s in v.surfaces],
-        image_colors = v.image_colors,
         transparency_depth = v.transparency_depth,
         image_brightness_factor = v.image_brightness_factor,
-        default_rgba = v.default_rgba
+        default_rgba = v.default_rgba,
+        **color_kw
         )
 
     if copy_rendering_options:
@@ -1849,13 +1855,14 @@ class VolumeSurface(Surface):
     self.volume = volume
     self._level = level
     self._mesh = mesh
-    self.rgba = rgba
+    color = [int(min(255,max(0,255*r))) for r in rgba]
+    Surface.set_color(self, color)	# Don't set self.rgba since that calls color changed volume callback
     self._contour_settings = {}	         	# Settings for current surface geometry
     self._min_status_message_voxels = 2**24	# Show status messages only on big surface calculations
     self._use_thread = False			# Whether to compute next surface in thread
     self._surf_calc_thread = None
     self.clip_cap = True			# Cap surface when clipped
-    
+
   def delete(self):
     self.volume._surfaces.remove(self)
     Surface.delete(self)
@@ -3451,10 +3458,10 @@ class MultiChannelSeries(Model):
 
     # Parent models are always restored before child models.
     # Restore child map list after child maps are restored.
-    def restore_maps(trigger_name, session, mcs = mcs, map_ids = data['map ids']):
+    def restore_maps(trigger_name, session, mcs = mcs, map_ids = data['map series ids']):
       idm = {m.id : m for m in mcs.child_models()}
       map_series = [idm[id] for id in map_ids if id in idm]
-      channels.set_map_series(map_series)
+      mcs.set_map_series(map_series)
       from chimerax.core.triggerset import DEREGISTER
       return DEREGISTER
     session.triggers.add_handler('end restore session', restore_maps)
