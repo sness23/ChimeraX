@@ -14,8 +14,8 @@ SUBDIR_SYNC = 1
 include $(TOP)/mk/config.make
 
 SUBDIRS = addh align_algs alignment_hdrs alignments atom_search atomic \
-	  attributes basic_actions bild blastprotein \
-	  bond_rot bug_reporter bumps bundle_builder buttons cage_builder \
+	  basic_actions bild blastprotein bond_rot \
+	  bug_reporter bumps bundle_builder buttons cage_builder \
 	  cellpack chem_group clashes cmd_line \
 	  color_globe connect_structure crosslinks crystal \
 	  dicom dist_monitor dist_ui dssp exp_cmd file_history \
@@ -26,7 +26,7 @@ SUBDIRS = addh align_algs alignment_hdrs alignments atom_search atomic \
 	  nucleotides pdb pick_blobs preset_mgr read_pbonds \
 	  registration remote_control rest_server \
 	  residue_fit rotamer_lib_mgr rotamer_libs scheme_mgr \
-	  segger segment seq_view sim_matrices \
+	  segger segment seq_view show_attr sim_matrices \
 	  shell shortcuts show_attr sideview \
 	  smooth_lines spacenavigator std_commands \
 	  stl storm struts surface swapaa swap_res \
