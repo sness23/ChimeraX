@@ -12,11 +12,12 @@
 from chimerax.mouse_modes import MouseMode
 class ContourLevelMouseMode(MouseMode):
     name = 'contour level'
-    icon_file = 'contour.png'
+    icon_file = 'icons/contour.png'
 
     def __init__(self, session):
         MouseMode.__init__(self, session)
         self._maps = []
+        self.speed = 1		# Sensitivity of mouse motions.
         
     def mouse_down(self, event):
         MouseMode.mouse_down(self, event)
@@ -26,7 +27,8 @@ class ContourLevelMouseMode(MouseMode):
         x,y = event.position()
         v = self.session.main_view
         xyz1, xyz2 = v.clip_plane_points(x,y)    # scene coordinates
-        return self._picked_maps_on_segment(xyz1, xyz2)
+        maps = self._picked_maps_on_segment(xyz1, xyz2)
+        return maps
 
     def _picked_maps_on_segment(self, xyz1, xyz2):
         closest = None
@@ -42,11 +44,11 @@ class ContourLevelMouseMode(MouseMode):
                 else:
                     closest = m
         return shown_maps if closest is None else [closest]
-
+    
     def mouse_drag(self, event):
 
         dx, dy = self.mouse_motion(event)
-        f = -0.001*dy
+        f = -0.001*self.speed*dy
 
         adjust_threshold_levels(self._maps, f)
 
@@ -55,7 +57,7 @@ class ContourLevelMouseMode(MouseMode):
     
     def wheel(self, event):
         d = event.wheel_value()
-        f = d/30
+        f = self.speed * d/30
         maps = self._picked_maps(event)
         adjust_threshold_levels(maps, f)
 
@@ -67,18 +69,27 @@ class ContourLevelMouseMode(MouseMode):
         self._maps = []
         MouseMode.mouse_up(self, event)
         
-    def vr_press(self, xyz1, xyz2):
+    def vr_press(self, event):
         # Virtual reality hand controller button press.
+        xyz1, xyz2 = event.picking_segment()
         self._maps = self._picked_maps_on_segment(xyz1, xyz2)
 
-    def vr_motion(self, position, move, delta_z):
+    def vr_motion(self, event):
         # Virtual reality hand controller motion.
-        adjust_threshold_levels(self._maps, delta_z)
+        adjust_threshold_levels(self._maps, event.room_vertical_motion)
         
-    def vr_release(self):
+    def vr_release(self, event):
         # Virtual reality hand controller button release.
         self.log_volume_command()
         self._maps = []
+
+    def vr_thumbstick(self, event):
+        # Virtual reality hand controller button press.
+        step = e.thumbstick_step()
+        if step != 0:
+            xyz1, xyz2 = event.picking_segment()
+            maps = self._picked_maps_on_segment(xyz1, xyz2)
+            adjust_threshold_levels(maps, 0.001*self.speed*step)
 
     def log_volume_command(self):
         for v in self._maps:

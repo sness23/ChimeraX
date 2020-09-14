@@ -19,9 +19,7 @@ from chimerax.core.state import StateManager
 from chimerax.core.toolshed import ProviderManager
 class AlignmentsManager(StateManager, ProviderManager):
     """Manager for sequence alignments"""
-    def __init__(self, session, bundle_info):
-        # Just for good form.  Neither base class currently defines __init__.
-        super().__init__()
+    def __init__(self, session, name, bundle_info):
         self._alignments = {}
         # bundle_info needed for session save
         self.bundle_info = bundle_info
@@ -34,8 +32,9 @@ class AlignmentsManager(StateManager, ProviderManager):
         self.triggers.add_trigger("destroy alignment")
         self._installed_headers = {}
         self._installed_viewers = {}
+        super().__init__(name)
 
-    def add_provider(self, bundle_info, name, *, single_seq_relevant=False, type=None,
+    def add_provider(self, bundle_info, name, *, type=None,
             synonyms=[], subcommand_name=None, sequence_viewer=True, alignment_viewer=True, **kw):
         """Register an alignment header, or an alignment/sequence viewer and its associated subcommand.
 
@@ -48,8 +47,7 @@ class AlignmentsManager(StateManager, ProviderManager):
 
         Header Parameters
         ----------
-        single_seq_relevant : bool
-            Is this header relevant if only a single sequence is being displayed rather than an alignment?
+        (none)
 
         'run_provider' for headers should return the header's class object.
 
@@ -70,7 +68,7 @@ class AlignmentsManager(StateManager, ProviderManager):
             to view and should return the viewer instance.
         """
         if type == "header":
-            self._installed_headers[name] = (bundle_info, single_seq_relevant)
+            self._installed_headers[name] = bundle_info
         elif type == "viewer":
             if subcommand_name:
                 if subcommand_name in _builtin_subcommands:
@@ -111,37 +109,34 @@ class AlignmentsManager(StateManager, ProviderManager):
 
     def header(self, name):
         if name in self._installed_headers:
-            bundle_info, single_seq_relevant = self._installed_headers[name]
+            bundle_info = self._installed_headers[name]
             return bundle_info.run_provider(self.session, name, self)
         # not installed
         #TODO
 
-    def headers(self, *, single_seq_relevant=None, installed_only=True):
+    def headers(self, *, installed_only=True):
         hdrs = []
         if installed_only:
             for name, info in self._installed_headers.items():
-                bundle_info, hdr_single_seq_rel = info
-                if single_seq_relevant in (None, False) or hdr_single_seq_rel:
-                    hdrs.append(self.header(name))
+                hdrs.append(self.header(name))
         else:
-            for name in self.header_names(installed_only=False, single_seq=single_seq):
+            for name in self.header_names(installed_only=False):
                 hdrs.append(self.header(name))
         return hdrs
 
-    def header_names(self, *, installed_only=True, single_seq_relevant=None):
+    def header_names(self, *, installed_only=True):
         names = []
         if installed_only:
             for name, info in self._installed_headers.items():
-                bundle_info, hdr_single_seq_rel = info
-                if single_seq_relevant in (None, False) or hdr_single_seq_rel:
-                    names.append(name)
+                bundle_info = info
+                names.append(name)
         else:
             #TODO
             pass
         return names
 
     def new_alignment(self, seqs, identify_as, attrs=None, markups=None, auto_destroy=None,
-            align_viewer=None, seq_viewer=None, auto_associate=True, name=None, intrinsic=False):
+            align_viewer=None, seq_viewer=None, auto_associate=True, name=None, intrinsic=False, **kw):
         """Create new alignment from 'seqs'
 
         Parameters
@@ -240,7 +235,7 @@ class AlignmentsManager(StateManager, ProviderManager):
         if identify_as:
             self.session.logger.info("Alignment identifier is %s" % identify_as)
         alignment = Alignment(self.session, seqs, identify_as, attrs, markups, auto_destroy,
-            auto_associate, description, intrinsic)
+            auto_associate, description, intrinsic, **kw)
         if identify_as:
             self._alignments[identify_as] = alignment
         if viewer_text:
@@ -299,7 +294,7 @@ def _register_viewer_subcommand(logger, viewer_sub):
         else:
             alignments = alignment_s
         for alignment in alignments:
-            alignment._dispatch_viewer_command(session, _viewer_keyword, subcommand_text)
+            alignment._dispatch_viewer_command(_viewer_keyword, subcommand_text)
     from .cmd import AlignmentArg
     from chimerax.core.commands import CmdDesc, register, Or, EmptyArg, RestOfLine, ListOf
     desc = CmdDesc(

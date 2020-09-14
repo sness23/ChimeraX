@@ -15,7 +15,7 @@ from chimerax.core.toolshed import ProviderManager
 class PresetsManager(ProviderManager):
     """Manager for presets"""
 
-    def __init__(self, session):
+    def __init__(self, session, name):
         self.session = session
         from . import settings
         settings.settings = settings._PresetsSettings(session, "presets")
@@ -28,6 +28,7 @@ class PresetsManager(ProviderManager):
         if session.ui.is_gui:
             session.ui.triggers.add_handler('ready',
                 lambda *arg, ses=session: settings.register_settings_options(session))
+        super().__init__(name)
 
     @property
     def presets_by_category(self):
@@ -71,9 +72,10 @@ class PresetsManager(ProviderManager):
         else:
             from chimerax.core.commands import run
             num_lines = 0
-            for line in preset.splitlines():
-                run(self.session, line, log=False)
-                num_lines += 1
+            with self.session.undo.aggregate("preset"):
+                for line in preset.splitlines():
+                    run(self.session, line, log=False)
+                    num_lines += 1
             if num_lines == 1:
                 parts = [p.strip() for p in preset.split(';')]
                 display_lines = '\n'.join(parts)
@@ -103,9 +105,9 @@ class PresetsManager(ProviderManager):
                 preset_info[entry[:-4].replace('_', ' ')] = f.read()
                 f.close()
             elif entry.endswith(".py"):
-                from chimerax.core.commands import run, quote_if_necessary
-                preset_info[entry[:-3].replace('_', ' ')] = lambda p=quote_if_necessary(entry_path), \
-                    run=run, ses=self.session: run(ses, "open "+p, log=False)
+                from chimerax.core.commands import run, FileNameArg
+                preset_info[entry[:-3].replace('_', ' ')] = lambda p=FileNameArg.unparse(entry_path), \
+                    run=run, ses=self.session: run(ses, "open " + p, log=False)
         return preset_info, subfolders
 
     def _new_custom_folder_cb(self, *args):

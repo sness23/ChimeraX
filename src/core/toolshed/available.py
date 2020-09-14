@@ -13,9 +13,9 @@
 
 
 from . import _debug
-import re
 
 _CACHE_FILE = "available.json"
+FORMAT_VERSION = 1
 
 
 class AvailableBundleCache(list):
@@ -23,6 +23,8 @@ class AvailableBundleCache(list):
     def __init__(self, cache_dir):
         self.cache_dir = cache_dir
         self.uninstallable = []
+        self.toolshed_url = None
+        self.format_version = 1
 
     def load(self, logger, toolshed_url):
         #
@@ -30,18 +32,26 @@ class AvailableBundleCache(list):
         # json interface.
         #
         _debug("AvailableBundleCache.load: toolshed_url", toolshed_url)
+        from chimerax import app_dirs
         from urllib.parse import urljoin, urlencode
-        params = [("uuid", self.uuid())]
+        params = [
+            ("uuid", self.uuid()),
+            ("app_version", app_dirs.version),
+            ("format_version", FORMAT_VERSION),
+        ]
         url = urljoin(toolshed_url, "bundle/") + '?' + urlencode(params)
         _debug("AvailableBundleCache.load: url", url)
         from urllib.request import urlopen
         with urlopen(url) as f:
             import json
             data = json.loads(f.read())
+        data.insert(0, ['toolshed_url', toolshed_url])
+        data.insert(0, ['format_version', FORMAT_VERSION])
         import os
-        with open(os.path.join(self.cache_dir, _CACHE_FILE), 'w') as f:
-            import json
-            json.dump(data, f, indent=0)
+        if self.cache_dir is not None:
+            with open(os.path.join(self.cache_dir, _CACHE_FILE), 'w') as f:
+                import json
+                json.dump(data, f, indent=0)
         try:
             from chimerax.registration import nag
         except ImportError:
@@ -61,35 +71,34 @@ class AvailableBundleCache(list):
         self._build_bundles(data)
 
     def _build_bundles(self, data):
-        from distutils.version import LooseVersion as Version
+        from packaging.version import Version
         import chimerax.core
         my_version = Version(chimerax.core.version)
         for d in data:
-            b = _build_bundle(d)
-            if not b:
-                continue
-            if self._installable(b, my_version):
-                self.append(b)
+            if isinstance(d, list):
+                if d[0] == 'format_version':
+                    self.format_version = d[1]
+                elif d[0] == 'toolshed_url':
+                    self.toolshed_url = d[1]
             else:
-                self.uninstallable.append(b)
+                b = _build_bundle(d)
+                if not b:
+                    continue
+                if self._installable(b, my_version):
+                    self.append(b)
+                else:
+                    self.uninstallable.append(b)
 
     def _installable(self, b, my_version):
-        from distutils.version import LooseVersion as Version
         installable = False
-        for pkg, op, v in b.requires:
-            if pkg != "ChimeraX-Core":
+        for require in b.requires:
+            if require.name != "ChimeraX-Core":
                 continue
-            req_version = Version(v)
-            if op == ">=":
-                installable = my_version >= req_version
-            elif op == "==":
-                installable = my_version == req_version
-            elif op == "<=":
-                installable = my_version <= req_version
-            elif op == ">":
-                installable = my_version > req_version
-            elif op == "<":
-                installable = my_version < req_version
+            if require.marker is None:
+                okay = True
+            else:
+                okay = require.marker.evaluate()
+            installable = okay and require.specifier.contains(my_version, prereleases=True)
             break
         return installable
 
@@ -105,6 +114,8 @@ class AvailableBundleCache(list):
 
 
 def has_cache_file(cache_dir):
+    if cache_dir is None:
+        return False
     import os
     return os.path.exists(os.path.join(cache_dir, _CACHE_FILE))
 
@@ -225,7 +236,7 @@ def _build_bundle(d):
         for fmt_name, fd in fmt_d.items():
             # _debug("processing data format: %s" % fmt_name)
             nicknames = fd.get("nicknames", [])
-            categories = fd.get("categories", [])
+            category = fd.get("category", "")
             suffixes = fd.get("suffixes", [])
             mime_types = fd.get("mime_types", [])
             url = fd.get("url", "")
@@ -234,7 +245,7 @@ def _build_bundle(d):
             synopsis = fd.get("synopsis", "")
             encoding = fd.get("encoding", "")
             fi = FormatInfo(name=fmt_name, nicknames=nicknames,
-                            category=categories, suffixes=suffixes,
+                            category=category, suffixes=suffixes,
                             mime_types=mime_types, url=url, icon=icon,
                             dangerous=dangerous, synopsis=synopsis,
                             encoding=encoding)
@@ -301,8 +312,8 @@ def _build_bundle(d):
             keywords = fd.get("keywords", None)
             if keywords:
                 keywords = _extract_extra_keywords(keywords)
-            fi.has_open = True
-            fi.open_kwds = keywords
+            fi.has_save = True
+            fi.save_kwds = keywords
 
     #
     # Finished.  Return BundleInfo instance.
@@ -335,12 +346,10 @@ def _parse_session_versions(sv):
     return range(lo, hi + 1)
 
 
-_REReq = re.compile(r"""(?P<bundle>\S+)\s*\((?P<op>[<>=]+)(?P<version>\S+)\)""")
-
-
 def _parse_requires(r):
-    # Only handle requirements of form "bundle (op version)" for now
-    m = _REReq.match(r)
-    if m is None:
+    from packaging.requirements import Requirement, InvalidRequirement
+    try:
+        require = Requirement(r)
+    except InvalidRequirement:
         return None
-    return (m.group("bundle"), m.group("op"), m.group("version"))
+    return require

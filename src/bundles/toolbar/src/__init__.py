@@ -14,7 +14,9 @@ class _ToolbarAPI(BundleAPI):
     def start_tool(session, bi, ti):
         from . import tool
         if ti.name == "Toolbar":
-            return tool.ToolbarTool(session, ti.name)
+            return tool.get_toolbar_singleton(session)
+        if ti.name == "Customize Toolbar":
+            return tool.CustomizeTool(session, ti.name)
         raise ValueError("trying to start unknown tool: %s" % ti.name)
 
     @staticmethod
@@ -26,14 +28,13 @@ class _ToolbarAPI(BundleAPI):
                 session.toolbar.clear()
             else:
                 from .manager import ToolbarManager
-                session.toolbar = ToolbarManager(session)
-            return session.toolbar
+                session.toolbar = ToolbarManager(session, name)
 
     @staticmethod
     def run_provider(session, name, mgr, **kw):
         """Run toolbar provider"""
-        # none registered yet
-        return
+        from . import providers
+        providers.run_provider(session, name)
 
 
 bundle_api = _ToolbarAPI()

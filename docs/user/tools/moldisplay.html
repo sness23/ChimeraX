@@ -27,11 +27,17 @@ class="clRight" title="User Guide Index"/></a>
 <p>
 Icons in the <b>Molecule Display</b> tab of the
 <a href="toolbar.html"><b>Toolbar</b></a> allow
-changing the display of atomic models or their 
-<a href="../selection.html">selected</a> parts with a single click.
+changing the display of atomic models with a single click.
+They apply to the <a href="../hierarchy.html">displayed models</a> only
+(those with &nbsp;<img class="iconbar" src="ui-icons/shown.png"
+title="eye icon" alt="eye icon">&nbsp; checkboxes in the
+<a href="modelpanel.html"><b>Model Panel</b></a>
+checked for themselves and any parents), and if those models contain
+a <a href="../selection.html">selection</a>, only the selected parts.
 See also:
-<a href="basicactions.html"><b>Basic Actions</b></a>,
+<a href="../menu.html#actions"><b>Actions</b> menu</a>,
 <a href="../menu.html#presets"><b>Presets</b> menu</a>,
+<a href="basicactions.html"><b>Basic Actions</b></a>,
 <a href="../images.html">making images</a>
 </p><p>
 Clicking an icon shows the executed command in the
@@ -209,10 +215,12 @@ margin:0;padding:3">
 <td align="center">
 <b><a href="../commands/color.html#sequential">rainbow</a></b></td>
 </tr><tr>
-<td align="center"><img src="shortcut-icons/bfactor.png" width="35px"></td>
-<td align="center">color by B-factor</td>
+<td align="center"><img src="shortcut-icons/esp.png" width="35px"></td>
+<td align="center">color 
+<a href="../commands/surface.html">molecular surface</a> by Coulombic
+electrostatic potential</td>
 <td align="center">
-<b><a href="../commands/color.html#byattribute">color bfactor</a></b></td>
+<b><a href="../commands/coulombic.html">coulombic</a></b></td>
 </tr><tr>
 <td align="center"><img src="shortcut-icons/hydrophobicity.png" width="35px"></td>
 <td align="center" class="text">color 
@@ -220,6 +228,11 @@ margin:0;padding:3">
 <br>(<a href="../commands/mlp.html">molecular lipophilic potential</a>)</td>
 <td align="center">
 <b><a href="../commands/mlp.html">mlp</a></b></td>
+</tr><tr>
+<td align="center"><img src="shortcut-icons/bfactor.png" width="35px"></td>
+<td align="center">color by B-factor</td>
+<td align="center">
+<b><a href="../commands/color.html#byattribute">color bfactor</a></b></td>
 </tr><tr>
 <td align="center"><img src="nuc-icons/nuc-color.png" width="35px"></td>
 <td align="center" class="text">color-code nucleic acids
@@ -265,5 +278,5 @@ chain</a></b>)</td>
 </table>
 <hr>
 <address>UCSF Resource for Biocomputing, Visualization, and Informatics / 
-August 2019</address>
+August 2020</address>
 </body></html>

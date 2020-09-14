@@ -13,18 +13,53 @@
 
 # -----------------------------------------------------------------------------
 #
-from chimerax.core.commands import Annotation, AnnotationError, AtomSpecArg, ObjectsArg, ModelArg
+from chimerax.core.commands import Annotation, AnnotationError, AtomSpecArg, ObjectsArg, ModelArg, StringArg
 
 class AtomsArg(AtomSpecArg):
     """Parse command atoms specifier"""
     name = "an atoms specifier"
 
     @classmethod
-    def parse(cls, text, session):
+    def parse(cls, text, session, ordered=False):
         aspec, text, rest = super().parse(text, session)
-        atoms = aspec.evaluate(session).atoms
+        atoms = aspec.evaluate(session, order_implicit_atoms=ordered).atoms
         atoms.spec = str(aspec)
         return atoms, text, rest
+
+
+class AtomArg(AtomsArg):
+    """Parse command specifier for an atom"""
+    name = 'an atom specifier'
+
+    @classmethod
+    def parse(cls, text, session):
+        atoms, used, rest = super().parse(text, session)
+        if len(atoms) != 1:
+            from chimerax.core.commands import AnnotationError
+            raise AnnotationError("Must specify exactly one atom (specified %d)" % len(atoms))
+        return atoms[0], used, rest
+
+
+class ElementArg(StringArg):
+    """Parse command specifier for an atomic symbol"""
+    name = 'an atomic symbol'
+
+    @classmethod
+    def parse(cls, text, session):
+        element_name, used, rest = super().parse(text, session)
+        from . import Element
+        e = Element.get_element(element_name)
+        if e.number == 0:
+            from chimerax.core.commands import AnnotationError
+            raise AnnotationError("'%s' is not an atomic symbol" % element_name)
+        return e, used, rest
+
+
+class OrderedAtomsArg(AtomsArg):
+
+    @classmethod
+    def parse(cls, text, session):
+        return super().parse(text, session, ordered=True)
 
 
 class ResiduesArg(AtomSpecArg):
@@ -34,7 +69,10 @@ class ResiduesArg(AtomSpecArg):
     @classmethod
     def parse(cls, text, session):
         aspec, text, rest = super().parse(text, session)
-        residues = aspec.evaluate(session).atoms.residues.unique()
+        evaled = aspec.evaluate(session)
+        from .molarray import concatenate, Atoms
+        atoms = concatenate((evaled.atoms,) + evaled.bonds.atoms, Atoms)
+        residues = atoms.residues.unique()
         residues.spec = str(aspec)
         return residues, text, rest
 
@@ -188,14 +226,14 @@ def parse_symmetry(session, group, center = None, axis = None, molecule = None):
 
     # Handle products of symmetry groups.
     groups = group.split('*')
-    from chimerax.core.geometry import Places
+    from chimerax.geometry import Places
     ops = Places()
     for g in groups:
         ops = ops * group_symmetries(session, g, molecule)
 
     # Apply center and axis transformation.
     if center is not None or axis is not None:
-        from chimerax.core.geometry import Place, vector_rotation, translation
+        from chimerax.geometry import Place, vector_rotation, translation
         tf = Place()
         if center is not None and tuple(center) != (0,0,0):
             tf = translation([-c for c in center])
@@ -209,7 +247,7 @@ def parse_symmetry(session, group, center = None, axis = None, molecule = None):
 #
 def group_symmetries(session, group, molecule):
 
-    from chimerax.core import geometry
+    from chimerax import geometry
     from chimerax.core.errors import UserError
 
     g0 = group[:1].lower()
@@ -271,7 +309,7 @@ def group_symmetries(session, group, molecule):
             param.append(0.0)
         rise, angle, n, offset = param
         n = int(n)
-        from chimerax.core.geometry import Places
+        from chimerax.geometry import Places
         tflist = Places([geometry.helical_symmetry_matrix(rise, angle, n = i+offset)
                          for i in range(n)])
     elif gfields[0].lower() == 'shift' or (g0 == 't' and nf >= 3):
@@ -369,6 +407,66 @@ def make_closest_placement_identity(tflist, center):
     i = d2.argmin()
     tfinv = tflist[i].inverse()
     rtflist = [tf*tfinv for tf in tflist]
-    from chimerax.core.geometry import Place, Places
+    from chimerax.geometry import Place, Places
     rtflist[i] = Place()
     return Places(rtflist)
+
+class _ResSpec:
+    def __init__(self, initial_spec):
+        self.spec = initial_spec
+        self.comma_okay = False
+        self.cur_chain = None
+
+    def add_range(self, start_res, end_res):
+        if start_res.chain_id != self.cur_chain:
+            show_chain = True
+            self.cur_chain = start_res.chain_id
+            self.comma_okay = False
+        else:
+            show_chain = False
+        if self.comma_okay:
+            self.spec += ','
+        else:
+            self.comma_okay = True
+        if end_res:
+            self.spec += "%s-%s" % (start_res.string(omit_structure=True, residue_only=not show_chain,
+                style="command")[(0 if show_chain else 1):],
+                end_res.string(omit_structure=True, style="command", residue_only=True)[1:])
+        else:
+            self.spec += "%s" % start_res.string(omit_structure=True, residue_only=not show_chain,
+                style="command")[(0 if show_chain else 1):]
+
+def concise_residue_spec(session, residues):
+    from . import Residues
+    if not isinstance(residues, Residues):
+        residues = Residues(residues)
+    from . import all_structures
+    need_model_spec = len(all_structures(session)) > 1
+    full_spec = ""
+    for struct, struct_residues in residues.by_structure:
+        sort_residues = list(struct_residues)
+        sort_residues.sort(key=lambda res: (res.chain_id, res.number, res.insertion_code))
+        res_index_map = {}
+        for i, r in enumerate(sort_residues):
+            res_index_map[r] = i
+        prev_index = prev_res = None
+        res_spec = _ResSpec(struct.string(style="command") if need_model_spec else "")
+        add_comma = False
+        for r in sort_residues:
+            r_index = res_index_map[r]
+            if prev_res is None:
+                start_range = r
+                end_range = None
+            elif r.chain_id == prev_res.chain_id and r_index == prev_index+1:
+                end_range = r
+            else:
+                res_spec.add_range(start_range, end_range)
+                start_range = r
+                end_range = None
+            prev_res = r
+            prev_index = r_index
+        res_spec.add_range(start_range, end_range)
+        if full_spec:
+            full_spec += ' '
+        full_spec += res_spec.spec
+    return full_spec

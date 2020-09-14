@@ -8,8 +8,7 @@ class LabelMouseMode(MouseMode):
     def mouse_down(self, event):
         MouseMode.mouse_down(self, event)
         x,y = event.position()
-        from chimerax.mouse_modes import picked_object
-        pick = picked_object(x, y, self.session.main_view)
+        pick = self.session.main_view.picked_object(x, y)
         self._label_pick(pick)
 
     def _label_pick(self, pick, color = None, background = None,
@@ -48,10 +47,9 @@ class LabelMouseMode(MouseMode):
                                  ('size',size), ('height',height)))
             log_equivalent_command(ses, 'label %s %s' % (rspec, opts))
 
-    def vr_press(self, xyz1, xyz2):
+    def vr_press(self, event):
         # Virtual reality hand controller button press.
-        from chimerax.mouse_modes import picked_object_on_segment
-        pick = picked_object_on_segment(xyz1, xyz2, self.view)
+        pick = event.picked_object(self.view)
         from chimerax.core.colors import BuiltinColors
         self._label_pick(pick,
                          color = BuiltinColors['yellow'],

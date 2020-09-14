@@ -16,16 +16,16 @@ verbose = False
 from .acceptor_geom import acc_syn_anti, acc_phi_psi, acc_theta_tau, acc_generic
 from .donor_geom import don_theta_tau, don_upsilon_tau, don_generic, don_water
 from .common_geom import ConnectivityError, AtomTypeError
-from chimerax.atomic.chem_group import find_group
-from chimerax.core.geometry import distance_squared
+from chimerax.chem_group import find_group
+from chimerax.geometry import distance_squared
 from .hydpos import hyd_positions
 from chimerax.atomic.idatm import type_info, tetrahedral, planar, linear, single
 from chimerax.atomic import Element
 from chimerax.core.errors import UserError
 import copy
 
-from chimerax.atomic.chem_group import H, N, C, O, R
-from chimerax.atomic.chem_group.chem_group import find_ring_planar_NHR2, find_nonring_ether, \
+from chimerax.chem_group import H, N, C, O, R
+from chimerax.chem_group.chem_group import find_ring_planar_NHR2, find_nonring_ether, \
     find_nonring_NR2, find_6ring_planar_NR2, find_5ring_planar_NR2, find_5ring_OR2
 _ring5_NH = lambda structs, ret_coll: find_ring_planar_NHR2(structs, ret_coll, 5)
 _ring6_aro_NH = lambda structs, ret_coll: find_ring_planar_NHR2(structs, ret_coll, 6,
@@ -333,7 +333,8 @@ def find_hbonds(session, structures, *, inter_model=True, intra_model=True, dono
     # hack to speed up coordinate lookup...
     from chimerax.atomic import Atoms, Atom
     if len(structures) == 1 or not inter_model or (
-            len(set([m if m.id is None else m.id[0] for m in structures])) == 1 and not inter_submodel):
+            len(set([m if m.id is None else (m.id[0] if len(m.id) == 1 else m.id[:-1])
+            for m in structures])) == 1 and not inter_submodel):
         Atom._hb_coord = Atom.coord
     else:
         Atom._hb_coord = Atom.scene_coord
@@ -466,7 +467,7 @@ def find_hbonds(session, structures, *, inter_model=True, intra_model=True, dono
             'S': gen_don_S_params
         }
 
-        from chimerax.atomic.search import AtomSearchTree
+        from chimerax.atom_search import AtomSearchTree
         metal_coord = {}
         acc_trees = {}
         hbonds = []
@@ -581,6 +582,7 @@ def find_hbonds(session, structures, *, inter_model=True, intra_model=True, dono
                     if not inter_submodel \
                     and acc_structure.id and structure.id \
                     and acc_structure.id[0] == structure.id[0] \
+                    and acc_structure.id[:-1] == structure.id[:-1] \
                     and acc_structure.id[1:] != structure.id[1:]:
                         continue
                     if has_sulfur[acc_structure]:
@@ -608,7 +610,7 @@ def find_hbonds(session, structures, *, inter_model=True, intra_model=True, dono
                                 % (acc_atom, e))
                             bad_connectivities += 1
                             continue
-                        except:
+                        except Exception:
                             print("donor:", donor_atom, " acceptor:", acc_atom)
                             raise
                         if verbose:
@@ -659,7 +661,7 @@ def find_hbonds(session, structures, *, inter_model=True, intra_model=True, dono
                             session.logger.info("\t%s satisfies donor criteria" % donor_atom)
                         # ensure hbond isn't precluded by metal-coordination...
                         if acc_atom in metal_coord:
-                            from chimerax.core.geometry import angle
+                            from chimerax.geometry import angle
                             conflict = False
                             for metal in metal_coord[acc_atom]:
                                 if angle(donor_atom._hb_coord, acc_atom._hb_coord,

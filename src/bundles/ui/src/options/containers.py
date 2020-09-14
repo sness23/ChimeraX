@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import QWidget, QFormLayout, QTabWidget, QVBoxLayout, QGrid
 class OptionsPanel(QWidget):
     """Supported API. OptionsPanel is a container for single-use (not savable) Options"""
 
-    def __init__(self, parent=None, *, sorting=True, scrolled=True):
+    def __init__(self, parent=None, *, sorting=True, scrolled=True, contents_margins=None):
         """sorting:
             False; options shown in order added
             True: options sorted alphabetically by name
@@ -34,12 +34,14 @@ class OptionsPanel(QWidget):
         """
         QWidget.__init__(self, parent)
         self._layout = QVBoxLayout()
+        if contents_margins is not None:
+            self._layout.setContentsMargins(*contents_margins)
         if scrolled:
             sublayout = QVBoxLayout()
+            sublayout.setContentsMargins(3,0,3,2)
             self.setLayout(sublayout)
             scroller = QScrollArea()
             scroller.setWidgetResizable(True)
-            from PyQt5.QtCore import Qt
             sublayout.addWidget(scroller)
             scrolled_area = QWidget()
             scroller.setWidget(scrolled_area)
@@ -55,14 +57,16 @@ class OptionsPanel(QWidget):
         self._form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         self._form.setVerticalSpacing(1)
         from PyQt5.QtCore import Qt
-        self._form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        # None of the below seem to have an effect on the Mac...
+        #self._form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        #self._form.setFormAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         # if we wanted to force the form contents to upper left...
         #self._form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
         self._layout.addLayout(self._form)
 
     def add_option(self, option):
         """Supported API. Add an option (instance of chimerax.ui.options.Option)."""
-        if self._sorting is None:
+        if self._sorting is False:
             insert_row = len(self._options)
         else:
             if self._sorting is True:
@@ -80,21 +84,29 @@ class OptionsPanel(QWidget):
             self._form.itemAt(insert_row,
                 QFormLayout.LabelRole).widget().setToolTip(option.balloon)
 
-    def add_option_group(self, group_label=None, **kw):
+    def add_option_group(self, group_label=None, checked=None, group_alignment=None, **kw):
         if group_label is None:
             grouping_widget = QWidget()
         else:
             grouping_widget = QGroupBox(group_label)
             grouping_widget.setContentsMargins(1,grouping_widget.contentsMargins().top()//2,1,1)
-        self._layout.addWidget(grouping_widget)
+            if checked is not None:
+                grouping_widget.setCheckable(True)
+                grouping_widget.setChecked(checked)
+        add_kw = {} if group_alignment is None else { 'alignment': group_alignment }
+        self._layout.addWidget(grouping_widget, **add_kw)
         suboptions = OptionsPanel(scrolled=False, **kw)
         self._option_groups.append(suboptions)
         return grouping_widget, suboptions
 
+    def change_label_for_option(self, option, new_label):
+        self._form.labelForField(option.widget).setText(new_label)
+
     def options(self):
         all_options = self._options[:]
         for grp in self._option_groups:
-            all_options.extend(grp._options)
+            # an option group can have further subgroups, so call options()
+            all_options.extend(grp.options())
         return all_options
 
     def sizeHint(self):
@@ -105,23 +117,29 @@ class OptionsPanel(QWidget):
 class CategorizedOptionsPanel(QTabWidget):
     """Supported API. CategorizedOptionsPanel is a container for single-use (not savable) Options sorted by category"""
 
-    def __init__(self, parent=None, *, category_sorting=True, option_sorting=True, **kw):
+    def __init__(self, parent=None, *, category_sorting=True, option_sorting=True,
+            category_scrolled={}, **kw):
         """sorting:
             False: categories/options shown in order added
             True: categories/options sorted alphabetically by name
             func: categories/options sorted based on the provided key function
+
+            If category not found in category_scrolled, defaults to True
         """
+        self._contents_margins = kw.pop('contents_margins', None)
         QTabWidget.__init__(self, parent, **kw)
         self._category_sorting = category_sorting
         self._option_sorting = option_sorting
         self._category_to_panel = {}
+        self._category_scrolled = category_scrolled
 
     def add_option(self, category, option):
         """Supported API. Add option (instance of chimerax.ui.options.Option) to given category"""
         try:
             panel = self._category_to_panel[category]
         except KeyError:
-            panel = OptionsPanel(sorting=self._option_sorting)
+            panel = OptionsPanel(sorting=self._option_sorting, contents_margins=self._contents_margins,
+                scrolled=self._category_scrolled.get(category, True))
             self.add_tab(category, panel)
         panel.add_option(option)
 
@@ -129,7 +147,7 @@ class CategorizedOptionsPanel(QTabWidget):
         try:
             panel = self._category_to_panel[category]
         except KeyError:
-            panel = OptionsPanel(sorting=self._option_sorting)
+            panel = OptionsPanel(sorting=self._option_sorting, contents_margins=self._contents_margins)
             self.add_tab(category, panel)
         return panel.add_option_group(**kw)
 
@@ -154,19 +172,28 @@ class CategorizedOptionsPanel(QTabWidget):
     def current_category(self):
         return self.tabText(self.currentIndex())
 
+    def set_current_category(self, category):
+        category = category.casefold()
+        for index in range(self.count()):
+            if category == self.tabText(index).casefold():
+                self.setCurrentIndex(index)
+                break
+        else:
+            raise ValueError("category not found")
+
     def options(self, category):
         return self._category_to_panel[category].options()
 
 class SettingsPanelBase(QWidget):
     def __init__(self, parent, option_sorting, multicategory,
             *, category_sorting=None, buttons=True, help_cb=None, **kw):
-        QWidget.__init__(self, parent, **kw)
+        QWidget.__init__(self, parent)
         self.multicategory = multicategory
         if multicategory:
             self.options_panel = CategorizedOptionsPanel(option_sorting=option_sorting,
-                    category_sorting=category_sorting)
+                    category_sorting=category_sorting, **kw)
         else:
-            self.options_panel = OptionsPanel(sorting=option_sorting)
+            self.options_panel = OptionsPanel(sorting=option_sorting, **kw)
 
         layout = QVBoxLayout()
         layout.setSpacing(5)
@@ -210,6 +237,9 @@ class SettingsPanelBase(QWidget):
             layout.addWidget(button_container, 0)
 
         self.setLayout(layout)
+
+    def show_category(self, category):
+        self.options_panel.set_current_category(category)
 
     def _get_actionable_options(self):
         if self.multicategory:
@@ -277,11 +307,11 @@ class SettingsPanel(SettingsPanelBase):
         """Supported API. Add an option (instance of chimerax.ui.options.Option)."""
         self.options_panel.add_option(option)
 
-    def add_option_group(self, group_label=None, *, sorting=True):
+    def add_option_group(self, **kw):
         """Returns a container widget and an OptionsPanel; caller is responsible
            for creating a layout for the container widget and placing the
            OptionsPanel in it, along with any other desired widgets"""
-        return self.options_panel.add_option_group(group_label, sorting=True)
+        return self.options_panel.add_option_group(**kw)
 
 class CategorizedSettingsPanel(SettingsPanelBase):
     """Supported API. CategorizedSettingsPanel is a container for remember-able Options
@@ -300,11 +330,17 @@ class CategorizedSettingsPanel(SettingsPanelBase):
         """Supported API. Add option (instance of chimerax.ui.options.Option) to given category"""
         self.options_panel.add_option(category, option)
 
-    def add_option_group(self, category, group_label=None, *, sorting=True):
+    def add_option_group(self, category, **kw):
         """Returns a container widget and an OptionsPanel; caller is responsible
            for creating a layout for the container widget and placing the
            OptionsPanel in it, along with any other desired widgets"""
-        return self.options_panel._category_to_panel[category].add_option_group(group_label, sorting=True)
+        try:
+            panel = self.options_panel._category_to_panel[category]
+        except KeyError:
+            panel = OptionsPanel(sorting=self.options_panel._option_sorting,
+                contents_margins=self.options_panel._contents_margins)
+            self.options_panel.add_tab(category, panel)
+        return panel.add_option_group(**kw)
 
     def add_tab(self, category, panel):
         """Supported API. Same as CategorizedOptionsPanel.add_tab(...)"""

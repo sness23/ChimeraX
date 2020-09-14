@@ -429,6 +429,9 @@ class TableTool(_BaseTool):
         tool.setup(self.structures)
 
     def _cb_hb(self, query):
+        self._count_pbonds(query, "hbonds", "hydrogen bonds", "HBonds")
+
+    def _count_pbonds(self, query, finder, cat_name, column_name):
         # Create hydrogen bonds between receptor(s) and ligands
         from chimerax.core.commands import concise_model_spec, run
         from chimerax.atomic import AtomicStructure
@@ -436,10 +439,10 @@ class TableTool(_BaseTool):
         all = self.session.models.list(type=AtomicStructure)
         others = concise_model_spec(self.session,
                                     set(all) - set(self.structures))
-        cmd = ("hbonds %s restrict %s "
-               "reveal true intersubmodel true" % (mine, others))
+        cmd = ("%s %s restrict %s "
+               "reveal true intersubmodel true" % (finder, mine, others))
         run(self.session, cmd)
-        self._count_pb("hydrogen bonds", "HBonds")
+        self._count_pb(cat_name, column_name)
 
     def _count_pb(self, group_name, key):
         # Count up the hydrogen bonds for each structure
@@ -457,33 +460,27 @@ class TableTool(_BaseTool):
         self._update_models()
 
     def _cb_clash(self, query):
-        # Compute clashes between receptor(s) and ligands
-        from chimerax.core.commands import concise_model_spec, run
-        cmd = "clashes %s test others reveal true" % concise_model_spec(
-                                                            self.session,
-                                                            self.structures)
-        run(self.session, cmd)
-        self._count_pb("clashes", "Clashes")
+        self._count_pbonds(query, "clashes", "clashes", "Clashes")
 
     def _cb_export(self, query):
         from chimerax.ui.open_save import SaveDialog
-        sd = SaveDialog(add_extension="mol2")
+        sd = SaveDialog(self.session, data_formats=[self.session.data_formats["mol2"]])
         if not sd.exec():
             return
         path = sd.get_path()
         if path is None:
             return
         prefix = "##########"
-        from chimerax.mol2.io import write_mol2
+        from chimerax.mol2 import write_mol2
         with open(path, "w") as outf:
             for s in self.structures:
                 with OutputCache() as sf:
                     write_mol2(self.session, sf, models=[s])
-                    for item in s.viewdockx_data.items():
-                        print(prefix, "%s: %s\n" % item, end='', file=outf)
-                    print("\n", end='', file=outf)
-                    print(sf.saved_output, end='', file=outf)
-                    print("\n\n", end='', file=outf)
+                for item in s.viewdockx_data.items():
+                    print(prefix, "%s: %s\n" % item, end='', file=outf)
+                print("\n", end='', file=outf)
+                print(sf.saved_output, end='', file=outf)
+                print("\n\n", end='', file=outf)
 
     def _cb_prune(self, query):
         stars = int(query["stars"][0])

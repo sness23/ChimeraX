@@ -36,9 +36,8 @@ def select(session, objects=None, polymer=None, residues=False, minimum_length=N
     '''
 
     if objects is None:
-        from chimerax.core.commands import all_objects
+        from chimerax.core.objects import all_objects
         objects = all_objects(session)
-
 
     from chimerax.core.undo import UndoState
     undo_state = UndoState("select")
@@ -82,8 +81,8 @@ def _select_sequence(objects, sequence):
     protein_search_string = base_search_string.replace('B', '[DN]').replace('Z', '[EQ]')
     nucleic_search_string = base_search_string.replace('R', '[AG]').replace('Y', '[CTU]').replace(
         'N', '[ACGTU]')
-    orig_atoms = objects.atoms
-    for chain in orig_atoms.residues.chains.unique():
+    orig_res = objects.residues
+    for chain in orig_res.chains.unique():
         search_string = protein_search_string \
             if chain.polymer_type == Residue.PT_PROTEIN else nucleic_search_string
         try:
@@ -94,17 +93,18 @@ def _select_sequence(objects, sequence):
         for start, length in ranges:
             sel_residues.update([r for r in chain.residues[start:start+length] if r])
     residues = Residues(sel_residues)
-    atoms = residues.atoms.intersect(orig_atoms)
+    atoms = residues.intersect(orig_res).atoms
     from chimerax.core.objects import Objects
-    fobj = Objects(atoms = atoms, bonds = atoms.intra_bonds, pseudobonds = atoms.intra_pseudobonds,
-        models = atoms.structures.unique())
+    fobj = Objects(atoms = atoms, bonds = atoms.intra_bonds,
+                   pseudobonds = atoms.intra_pseudobonds,
+                   models = atoms.structures.unique())
     return fobj
     
 def select_add(session, objects=None, residues=False):
     '''Add objects to the selection.
     If objects is None everything is selected.'''
     if objects is None:
-        from chimerax.core.commands import all_objects
+        from chimerax.core.objects import all_objects
         objects = all_objects(session)
     from chimerax.core.undo import UndoState
     undo_state = UndoState("select add")
@@ -166,16 +166,24 @@ def select_clear(session):
     '''Clear the selection.'''
     from chimerax.core.undo import UndoState
     undo_state = UndoState("select clear")
-    clear_selection(session, undo_state)
+    with session.triggers.block_trigger("selection changed"):
+        clear_selection(session, undo_state)
     session.undo.register(undo_state)
 
 def report_selection(session):
+    # TODO: This routine is taking about 25% of time of select command with
+    #       this example "open 6zm7 ; time sel nucleic".
     s = session.selection
     mlist = [m for m in s.models() if m.selected]	# Exclude grouping models
     mc = len(mlist)
-    ac = sum([len(atoms) for atoms in s.items('atoms')], 0)
-    bc = sum([len(bonds) for bonds in s.items('bonds')], 0)
-    pbc = sum([len(pbonds) for pbonds in s.items('pseudobonds')], 0)
+    ac = bc = pbc = rc = 0
+    for atoms in s.items('atoms'):
+        ac += len(atoms)
+        rc += atoms.num_residues
+    for bonds in s.items('bonds'):
+        bc += len(bonds)
+    for pbonds in s.items('pseudobonds'):
+        pbc += len(pbonds)
     lines = []
     if mc == 0 and ac == 0 and bc == 0 and pbc == 0:
         lines.append('Nothing')
@@ -188,6 +196,9 @@ def report_selection(session):
     if pbc != 0:
         plural = ('s' if pbc > 1 else '')
         lines.append('%d pseudobond%s' % (pbc, plural))
+    if rc != 0:
+        plural = ('s' if rc > 1 else '')
+        lines.append('%d residue%s' % (rc, plural))
     if mc != 0:
         plural = ('s' if mc > 1 else '')
         lines.append('%d model%s' % (mc, plural))

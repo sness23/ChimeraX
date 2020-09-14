@@ -88,6 +88,37 @@ def clip_list(session):
     '''
     report_clip_info(session.main_view, session.logger)
 
+def clip_model(session, models, clipping = None):
+    '''
+    Allow disabling clipping for specific models.
+
+    Parameters
+    ----------
+    models : list of Models
+    clipping : bool
+      Whether models will be clipped by scene clip planes.
+      This setting does not effect clipping by near and far camera planes.
+    '''
+    if clipping is None:
+        lines = ['Model #%s clipping %s' % (m.id_string, m.allow_clipping)
+                 for m in models]
+        session.logger.info('\n'.join(lines))
+    else:
+        for m in models:
+            m.allow_clipping = clipping
+        for d in _non_model_descendants(models):
+            d.allow_clipping = clipping
+
+def _non_model_descendants(models):
+    dlist = []
+    from chimerax.core.models import Model
+    for m in models:
+        for d in m.child_drawings():
+            if not isinstance(d, Model):
+                dlist.append(d)
+                dlist.extend(_non_model_descendants([d]))
+    return dlist
+
 def plane_origin(view):
     b = view.drawing_bounds()
     if b is None:
@@ -122,11 +153,11 @@ def adjust_plane(name, offset, origin, normal, planes, view = None, camera_norma
             origin = plane_origin(view)
         plane_point = origin + offset * n
         if camera_normal is None or view is None:
-            from chimerax.core.graphics import SceneClipPlane
+            from chimerax.graphics import SceneClipPlane
             p = SceneClipPlane(name, n, plane_point)
         else:
             camera_plane_point = cpos.inverse() * plane_point
-            from chimerax.core.graphics import CameraClipPlane
+            from chimerax.graphics import CameraClipPlane
             p = CameraClipPlane(name, camera_normal, camera_plane_point, view)
         planes.add_plane(p)
     else:
@@ -165,13 +196,19 @@ def report_clip_info(viewer, log):
     if planes:
         b = viewer.drawing_bounds()
         c0 = b.center() if b else (0,0,0)
-        pinfo = ['%s %.5g' % (p.name,  -p.offset(c0) if p.name in ('far', 'back') else p.offset(c0))
-                 for p in planes]
-        msg = 'Using %d clip planes: %s' % (len(planes), ', '.join(pinfo))
+        pinfo = [_clip_plane_info(p, c0) for p in planes]
+        msg = 'Using %d clip planes:\n%s' % (len(planes), '\n'.join(pinfo))
     else:
         msg = 'Clipping is off'
     log.info(msg)
     log.status(msg)
+
+def _clip_plane_info(plane, center):
+    offset = -plane.offset(center) if plane.name in ('far', 'back') else plane.offset(center)
+    axis = '%.3f,%.3f,%.3f' % tuple(plane.normal)
+    point = '%.4g,%.4g,%.4g' % tuple(plane.plane_point)
+    info = '%s offset %.5g, axis %s, point %s)' % (plane.name,  offset, axis, point)
+    return info
 
 def warn_on_zero_spacing(session, near, far, front, back):
     p = session.main_view.clip_planes
@@ -185,8 +222,9 @@ def warn_on_zero_spacing(session, near, far, front, back):
             session.logger.warning('clip back plane is in front of front plane')
         
 def register_command(logger):
-    from chimerax.core.commands import CmdDesc, register, FloatArg, AxisArg
-    from chimerax.core.commands import CenterArg, CoordSysArg, Or, EnumOf, create_alias
+    from chimerax.core.commands import CmdDesc, register, create_alias
+    from chimerax.core.commands import CenterArg, CoordSysArg, Or, EnumOf, FloatArg, AxisArg
+    from chimerax.core.commands import ModelsArg, BoolArg
     offset_arg = Or(EnumOf(['off']), FloatArg)
     desc = CmdDesc(
         optional=[],
@@ -202,4 +240,9 @@ def register_command(logger):
     register('clip', desc, clip, logger=logger)
     register('clip off', CmdDesc(synopsis = 'Turn off all clip planes'), clip_off, logger=logger)
     register('clip list', CmdDesc(synopsis = 'List active clip planes'), clip_list, logger=logger)
+    model_desc = CmdDesc(
+        required = [('models', ModelsArg)],
+        optional = [('clipping', BoolArg)],
+        synopsis="Turn off clipping for individual models.")
+    register('clip model', model_desc, clip_model, logger=logger)
     create_alias('~clip', 'clip off', logger=logger)

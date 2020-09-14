@@ -71,6 +71,17 @@ class FitMapDialog(ToolInstance):
 
   # ---------------------------------------------------------------------------
   #
+  def delete(self):
+    
+    mmh = self._model_move_handler
+    if mmh:
+      self.session.triggers.remove_handler(mmh)
+      self._model_move_handler = None
+
+    ToolInstance.delete(self)
+    
+  # ---------------------------------------------------------------------------
+  #
   def _create_mol_map_menu(self, parent):
 
     from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
@@ -313,10 +324,13 @@ class FitMapDialog(ToolInstance):
     bmap = self._map_menu.value
     if (fatoms is None and fmap is None) or bmap is None:
       return None
-    if fatoms:
+    if fatoms is not None:
+      if len(fatoms) == 0:
+        return None
       xfo = fatoms[0].structure.scene_position      # Atom list case
-    else:
+    elif fmap is not None:
       xfo = fmap.scene_position
+
     xf = xfo.inverse() * bmap.scene_position
     return xf
 

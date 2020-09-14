@@ -21,7 +21,7 @@ TODO
 from chimerax.core.core_settings import set_proxies, settings as core_settings
 from .options import SymbolicEnumOption, ColorOption, BooleanOption, IntOption
 from .options import StringOption, HostPortOption
-from .widgets import hex_color_name
+from chimerax.core.colors import color_name
 
 class UpdateIntervalOption(SymbolicEnumOption):
     values = ("day", "week", "month")
@@ -53,7 +53,7 @@ class CoreSettingsPanel:
             "Background",
             ColorOption,
             "set bgColor %s",
-            hex_color_name,
+            color_name,
             "Background color of main graphics window",
             True),
         'http_proxy': (
@@ -120,6 +120,9 @@ class CoreSettingsPanel:
         layout.setContentsMargins(0, 0, 0, 0)
 
         ui_area.setLayout(layout)
+
+    def show_category(self, category):
+        self.options_widget.show_category(category)
 
     def _core_setting_changed(self, trig_name, info):
         setting_name, old_val, new_val = info

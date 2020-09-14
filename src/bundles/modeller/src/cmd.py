@@ -39,21 +39,21 @@ def sequence_model(session, targets, *, block=None, multichain=True, custom_scri
     except comparative.ModelingError as e:
         raise UserError(e)
 
-def score_models(session, structures, *, block=None, license_key=None):
+def score_models(session, structures, *, block=None, license_key=None, refresh=False):
     '''
     Fetch Modeller scores for models
     '''
     if block is None:
         block = session.in_script or not session.ui.is_gui
     from . import scores
-    scores.fetch_scores(session, structures, block=block, license_key=license_key)
+    scores.fetch_scores(session, structures, block=block, license_key=license_key, refresh=refresh)
 
 def register_command(logger):
-    from chimerax.core.commands import CmdDesc, register, ListOf, BoolArg, PasswordArg, IntArg
+    from chimerax.core.commands import CmdDesc, register, RepeatOf, BoolArg, PasswordArg, IntArg
     from chimerax.core.commands import OpenFileNameArg, OpenFolderNameArg
     from chimerax.seqalign import AlignSeqPairArg
     desc = CmdDesc(
-        required = [('targets', ListOf(AlignSeqPairArg))],
+        required = [('targets', RepeatOf(AlignSeqPairArg))],
         keyword = [('block', BoolArg), ('multichain', BoolArg), ('custom_script', OpenFileNameArg),
             ('dist_restraints', OpenFileNameArg), ('executable_location', OpenFileNameArg), ('fast', BoolArg),
             ('het_preserve', BoolArg), ('hydrogens', BoolArg), ('license_key', PasswordArg),
@@ -66,7 +66,7 @@ def register_command(logger):
     from chimerax.atomic import AtomicStructuresArg
     desc = CmdDesc(
         required = [('structures', AtomicStructuresArg)],
-        keyword = [('block', BoolArg), ('license_key', PasswordArg)],
+        keyword = [('block', BoolArg), ('license_key', PasswordArg), ('refresh', BoolArg)],
         synopsis = 'Fetch scores for models from Modeller web site'
     )
     register('modeller scores', desc, score_models, logger=logger)

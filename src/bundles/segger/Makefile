@@ -1,22 +1,36 @@
+TOP	= ../../..
+include $(TOP)/mk/config.make
+
 CHIMERAX_APP = $(realpath $(wildcard ../../../ChimeraX*.app))
-SEGGER_SRC = seggerx_2019_08_15.tar.gz
+SEGGER_SRC = seggerx_2020_09_03.tar.gz
 
-app-install install: seggerx
-	cd seggerx/Segger && env CHIMERAX_APP=$(CHIMERAX_APP) make install
+install app-install: seggerx
+	$(MAKE) -C seggerx/Segger install
 
-seggerx:
+seggerx: $(SEGGER_SRC)
 	tar xf $(SEGGER_SRC)
+	touch seggerx
+
+$(SEGGER_SRC):
+	$(FETCH_PREREQ) $(PREREQS_ARCHIVE)/segger/$(SEGGER_SRC)
+
+upload_new_version:
+	$(RSYNC) $(SEGGER_SRC) $(PREREQS_UPLOAD)/segger
 
 tarball:
+	make -C seggerx/Segger clean
 	tar -cHf  seggerx.tar --exclude=".*" --exclude=tutorials seggerx
 	gzip seggerx.tar
 	mv seggerx.tar.gz seggerx_$(shell date +"%Y_%m_%d").tar.gz
 
-sync:
+build: seggerx
+	$(MAKE) -C seggerx/Segger build
 
-test:
+sync: seggerx
+	$(MAKE) -C seggerx/Segger sync
 
-sync:
+test: seggerx
+	$(MAKE) -C seggerx/Segger test
 
 clean:
-	rm -rf seggerx
+	rm -rf seggerx $(SEGGER_SRC)

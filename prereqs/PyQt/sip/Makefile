@@ -13,13 +13,19 @@ endif
 all:
 
 install: $(SOURCE)
-	cd $(SOURCE) && $(PYTHON_EXE) configure.py && $(MAKE) && $(MAKE) install
+	cd $(SOURCE) && $(PYTHON_EXE) configure.py --sip-module PyQt5.sip && $(MAKE) && $(MAKE) install
 
 app-install:
 	$(RSYNC) $(PYSITEDIR)/sip.$(PYMOD_EXT) $(APP_PYSITEDIR)
 
-$(SOURCE):
+$(SOURCE): $(DISTRIBUTION)
 	tar zxf $(DISTRIBUTION) -C $(tmpdir)
+
+$(DISTRIBUTION):
+	$(FETCH_PREREQ) $(PREREQS_ARCHIVE)/sip/$(DISTRIBUTION)
+
+upload_new_version:
+	$(RSYNC) $(DISTRIBUTION) $(PREREQS_UPLOAD)/sip
 
 clean:
 	rm -rf $(SOURCE)

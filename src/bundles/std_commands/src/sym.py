@@ -12,7 +12,8 @@
 # === UCSF ChimeraX Copyright ===
 
 def sym(session, structures,
-        symmetry = None, center = None, axis = None, coordinate_system = None, assembly = None,
+        symmetry = None, center = None, axis = None, coordinate_system = None,
+        contact = None, range = None, assembly = None,
         copies = False, new_model = None, surface_only = False, resolution = None, grid_spacing = None):
     '''
     Show molecular assemblies of molecular models defined in mmCIF files.
@@ -31,6 +32,12 @@ def sym(session, structures,
       Axis of symmetry.  Default z.
     coordinate_system : Place
       Transform mapping coordinates for center and axis arguments to scene coordinates.
+    contact : float
+      Only include copies where some atom in the copy is within the contact distance of
+      the original structures.  Only used when the symmetry option is specified.
+    range : float
+      Only include copies where center of the bounding box of the copy is within range
+      of the center of the original structures.  Only used when the symmetry option is specified.
     assembly : string
       The name of assembly in the mmCIF file. If this parameter is None
       then the names of available assemblies are printed in log.
@@ -76,6 +83,10 @@ def sym(session, structures,
             from chimerax.core.errors import UserError
             raise UserError('Cannot specify explicit symmetry and the assembly option.')
         transforms = symmetry.positions(center, axis, coordinate_system, structures[0])
+        if contact is not None:
+            transforms = _contacting_transforms(structures, transforms, contact)
+        if range is not None:
+            transforms = _close_center_transforms(structures, transforms, range)
         show_symmetry(structures, symmetry.group, transforms, copies, new_model, surface_only,
                       resolution, grid_spacing, session)
         return
@@ -116,7 +127,7 @@ def sym_clear(session, structures = None):
         from chimerax.atomic import all_structures
         structures = all_structures(session)
     for m in structures:
-        from chimerax.core.geometry import Places
+        from chimerax.geometry import Places
         m.positions = Places([m.position])	# Keep only first position.
         for s in m.surfaces():
             s.positions = Places([s.position])
@@ -131,6 +142,8 @@ def register_command(logger):
         keyword = [('center', CenterArg),
                    ('axis', AxisArg),
                    ('coordinate_system', CoordSysArg),
+                   ('contact', FloatArg),
+                   ('range', FloatArg),
                    ('assembly', StringArg),
                    ('copies', BoolArg),
                    ('new_model', BoolArg),
@@ -204,7 +217,7 @@ def mmcif_assemblies(model):
     table_names = ('pdbx_struct_assembly',
                    'pdbx_struct_assembly_gen',
                    'pdbx_struct_oper_list')
-    from chimerax.atomic import mmcif
+    from chimerax import mmcif
     assem, assem_gen, oper = mmcif.get_mmcif_tables_from_metadata(model, table_names)
     if not assem or not assem_gen or not oper:
         return []
@@ -223,7 +236,7 @@ def mmcif_assemblies(model):
                        'matrix[1][1]', 'matrix[1][2]', 'matrix[1][3]', 'vector[1]',
                        'matrix[2][1]', 'matrix[2][2]', 'matrix[2][3]', 'vector[2]',
                        'matrix[3][1]', 'matrix[3][2]', 'matrix[3][3]', 'vector[3]'))
-    from chimerax.core.geometry import Place
+    from chimerax.geometry import Place
     for id, m11,m12,m13,m14,m21,m22,m23,m24,m31,m32,m33,m34 in mat:
         ops[id] = Place(matrix = ((m11,m12,m13,m14),(m21,m22,m23,m24),(m31,m32,m33,m34)))
 
@@ -300,11 +313,11 @@ class Assembly:
         included_atoms, excluded_atoms = self._partition_atoms(m.atoms, self._chain_ids())
         if new_model:
             excluded_atoms.delete()
-        from chimerax.surface import surface, surface_hide
+        from chimerax.surface import surface, surface_hide_patches
         surfs = surface(session, included_atoms, grid_spacing = grid_spacing, resolution = res)
         if not new_model and len(excluded_atoms) > 0:
             from chimerax.core.objects import Objects
-            surface_hide(session, Objects(atoms = excluded_atoms))
+            surface_hide_patches(session, Objects(atoms = excluded_atoms))
         for s in surfs:
             mmcif_cid = mmcif_chain_ids(s.atoms[:1], self.from_mmcif)[0]
             s.positions = self._chain_operators(mmcif_cid)
@@ -349,7 +362,7 @@ class Assembly:
         for chain_ids, operator_expr, ops in self.chain_ops:
             if chain_id in chain_ids:
                 cops.extend(ops)
-        from chimerax.core.geometry import Places
+        from chimerax.geometry import Places
         return Places(cops)
 
     def _molecule_copies(self, mol, new_model, session):
@@ -416,7 +429,7 @@ class Assembly:
 def is_integer(s):
     try:
         int(s)
-    except:
+    except Exception:
         return False
     return True
 
@@ -449,7 +462,7 @@ def mmcif_chain_ids(atoms, from_mmcif):
     return cids
 
 def operator_products(products, oper_table):
-    from chimerax.core.geometry import Places
+    from chimerax.geometry import Places
     p = Places(tuple(oper_table[e] for e in products[0]))
     if len(products) > 1:
         p = p * operator_products(products[1:], oper_table)
@@ -481,3 +494,33 @@ def assembly_info(mol, assemblies):
     lines.append('</table>')
     html = '\n'.join(lines)
     return html
+
+# -----------------------------------------------------------------------------
+#
+def _contacting_transforms(structures, transforms, distance):
+
+    from numpy import concatenate, float32
+    points = concatenate([s.atoms.scene_coords for s in structures]).astype(float32)
+    from chimerax.geometry import identity, find_close_points_sets, Places
+    ident = identity().matrix.astype(float32)
+    orig_points = [(points, ident)]
+    tfnear = Places([tf for tf in transforms if
+                     len(find_close_points_sets(orig_points,
+                                                [(points, tf.matrix.astype(float32))],
+                                                distance)[0][0]) > 0])
+    return tfnear
+
+# -----------------------------------------------------------------------------
+#
+def _close_center_transforms(structures, transforms, distance):
+
+    from numpy import concatenate
+    points = concatenate([s.atoms.scene_coords for s in structures])
+    from chimerax.geometry import point_bounds, distance as point_distance, Places
+    box = point_bounds(points)
+    if box is None:
+        return []
+    center = box.center()
+    tfnear = Places([tf for tf in transforms
+                     if point_distance(center, tf*center) <= distance])
+    return tfnear
