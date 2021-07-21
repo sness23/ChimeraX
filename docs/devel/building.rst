@@ -90,6 +90,13 @@ Steps for compiling ChimeraX on Windows 10:
 
 #. "make install" in the repository root.
 
+Windows using WSL
+--------------
+Upcoming versions of Windows provide means to run Linux GUI applications without the use
+of external X servers such as VcXsrv. WSL can even access the host GPU, which means it is
+possible to run ChimeraX on Linux on Windows. Simply follow the Linux build documentation,
+but additionally install... (FIXME: find the package)
+
 Linux Build
 -----------
 A long list of required packages are used to compile ChimeraX on Linux.
