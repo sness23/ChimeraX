@@ -1,6 +1,6 @@
 ..  vim: set expandtab shiftwidth=4 softtabstop=4:
 
-.. 
+..
     === UCSF ChimeraX Copyright ===
     Copyright 2017 Regents of the University of California.
     All rights reserved.  This software provided pursuant to a
@@ -72,7 +72,7 @@ Steps for compiling ChimeraX on Windows 10:
     Select "Windows and Web Development / Universal Windows App Development Tools".
     Make sure that Windows SDK 10.0.18362 is installed (matching vsvars.sh).
     Then start Visual Studio and login, then quit.
-    
+
 #. Install ​Cygwin, 64-bit version. In addition to the default packages, you'll need::
 
     binutils - xdr in md_crds needs ld.exe
@@ -83,7 +83,7 @@ Steps for compiling ChimeraX on Windows 10:
     patch - to patch source distribution
     rsync - to install files and fetch them
     unzip - used to build ffmpeg
-  
+
 #. Clone the `ChimeraX repository <https://github.com/RBVI/ChimeraX>`_ from GitHub.
 
 #. Run ". vsvars.sh" in chimerax root directory to set path to Visual Studio compiler.
@@ -101,6 +101,8 @@ The definition files for the virtual machine images list the required packages a
 are currently part of the private build_tools git repository on plato.cgl.ucsf.edu.
 TODO: Definition files should be moved to ChimeraX repository at GitHub.
 
+Ubuntu 20.04
+^^^^^^^^^^^^
 Here is an example of the requirements for building on Ubuntu 20.04::
 
     sudo apt-get install -y --no-install-recommends \
@@ -158,12 +160,32 @@ Here is an example of the requirements for building on Ubuntu 20.04::
 	xdg-utils \
 	zlib1g-dev
 
+CentOS
+^^^^^^
+You will need to enable EPEL on CentOS 7 and 8 in order to install one of ImageMagick or GraphicsMagick.
+The 'convert' utility provided by these packages is used to generate various icons from a 512x512 icon.
+
+For information about how to install EPEL see `the Fedora Wiki <https://fedoraproject.org/wiki/EPEL>`_.
+
+After enabling EPEL, pull new packages with :code:`sudo yum update`.
+
+Then install the following prerequisites::
+
+    sudo yum install \
+	cairo-devel \
+	ffmpeg \
+	gcc-c++ \
+	java-11-openjdk \
+	libffi-devel \
+	ImageMagick-devel \
+	xz-libs \
+	yasm
 
 macOS Build
 -----------
 
 XCode compilers are used.  Tested with XCode version 12.2 (Jan 2021) on macOS 10.15 (Catalina) and 11 (Big Sur).
-  
+
 #. Clone the `ChimeraX repository <https://github.com/RBVI/ChimeraX>`_ from GitHub::
 
      git clone git@github.com:RBVI/ChimeraX.git chimerax
