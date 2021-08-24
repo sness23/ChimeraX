@@ -125,6 +125,7 @@ else ifdef USE_MAC_FRAMEWORKS
 PYTHON_INCLUDE_DIRS = $(shell $(bindir)/python$(PYTHON_VERSION)$(PYTHON_ABI)-config --includes)
 PYTHON_FRAMEWORK = $(frameworkdir)/Python.framework/Versions/$(PYTHON_VERSION)
 APP_PYTHON_FRAMEWORK = $(app_frameworkdir)/Python.framework/Versions/$(PYTHON_VERSION)
+APP_PYTHON_FRAMEWORK_BIN = $(APP_PYTHON_FRAMEWORK)/bin
 PYTHON_LIBRARY_DIR = $(libdir)/python$(PYTHON_VERSION)
 APP_PYTHON_LIBRARY_DIR = $(app_libdir)/python$(PYTHON_VERSION)
 PYTHON_BIN = $(bindir)/python$(PYTHON_VERSION)
