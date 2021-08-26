@@ -96,6 +96,7 @@ PyPi packages used to generate ChimeraX documentation
 * Jinja2 - used internally by Sphinx
 * MarkupSafe - used by Jinja2
 * numpydoc - doc string parsing of function arguments for Sphinx
+* sphinx-autodoc-typehints - Parsing of function arguments' types for Sphinx
 * Pygments - syntax highlighting of code in Sphinx
 * Sphinx - Generates ChimeraX programming documentation
 * sphinxcontrib-blockdiag - extension for block diagrams in Sphinx, not sure if we ever use this
