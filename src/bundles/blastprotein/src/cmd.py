@@ -11,14 +11,15 @@
 # or derivations thereof.
 # === UCSF ChimeraX Copyright ===
 
-from chimerax.core.commands import CmdDesc, AtomSpecArg
-from chimerax.core.commands import StringArg, BoolArg, FloatArg, IntArg, EnumOf, Or
+from chimerax.core.commands import (
+    StringArg, BoolArg, FloatArg, IntArg, EnumOf, Or,
+    CmdDesc, AtomSpecArg, atomspec
+)
 from chimerax.core.errors import UserError
 from chimerax.seqalign import AlignSeqPairArg
 
 from .data_model import AvailableDBs, AvailableMatrices
 from .job import BlastProteinJob, manually_pull_blast_job
-from .ui import find_match
 
 # Use camel-case variable names for displaying keywords in help/usage
 def blastprotein(session, atoms=None, database="pdb", cutoff=1.0e-3,
@@ -55,8 +56,8 @@ def blastprotein(session, atoms=None, database="pdb", cutoff=1.0e-3,
                     max_seqs=maxSeqs, log=log, tool_inst_name=name)
 
 
-blastprotein_desc = CmdDesc(required=[("atoms", Or(AtomSpecArg,
-                                                   AlignSeqPairArg))],
+blastprotein_desc = CmdDesc(
+                        required=[("atoms", Or(AtomSpecArg, AlignSeqPairArg))],
                         keyword=[("database", EnumOf(AvailableDBs)),
                                  ("cutoff", FloatArg),
                                  ("matrix", EnumOf(AvailableMatrices)),
@@ -64,10 +65,14 @@ blastprotein_desc = CmdDesc(required=[("atoms", Or(AtomSpecArg,
                                  ("log", BoolArg),
                                  ("name", StringArg),
                                  ],
-                        synopsis="Search PDB/NR using BLAST")
+                        synopsis="Search PDB/NR using BLAST"
+                    )
 
 def blastprotein_pull(session, jobid, log=None):
     manually_pull_blast_job(session, jobid, log)
 
-blastprotein_pull_desc = CmdDesc(required=[("jobid", StringArg)],
-        keyword=[("log", BoolArg)])
+
+blastprotein_pull_desc = CmdDesc(
+                            required=[("jobid", StringArg)],
+                            keyword=[("log", BoolArg)]
+                         )

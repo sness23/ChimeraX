@@ -30,7 +30,7 @@ is an artificial intelligence method for predicting protein structures
 that has been highly successful in recent tests.
 The ChimeraX <b>AlphaFold</b> tool:
 <ul>
-<li><a href="#search">finds and retrieves existing predictions</a> from the
+<li><a href="#search">finds and retrieves existing models</a>
 from the <a href="https://alphafold.ebi.ac.uk/"
 target="_blank">AlphaFold Database</a>
 <br>&ndash; freely available for academic and commercial use under 
@@ -57,18 +57,27 @@ Highly accurate protein structure prediction with AlphaFold.</a>
 Jumper J, Evans R, Pritzel A, <i>et al.</i>
 <i>Nature.</i> 2021 Jul 15. doi: 10.1038/s41586-021-03819-2.
 </blockquote>
+<a name="alphafold-multimer"></a>
+<p>
+...and for multimer prediction:
+</p>
+<blockquote>
+<a href="https://www.biorxiv.org/content/10.1101/2021.10.04.463034"
+target="_blank">Protein complex prediction with AlphaFold-Multimer.</a>
+Evans R, O'Neill M, Pritzel A, <i>et al.</i> bioRxiv 2021.
+doi: https://doi.org/10.1101/2021.10.04.463034.
+</blockquote>
 <p>
 The
 <a href="https://alphafold.ebi.ac.uk/" target="_blank">AlphaFold Database</a>
-contains predictions for
+contains modeled structures of protein chains from
 <a href="https://alphafold.ebi.ac.uk/download" target="_blank">21 species</a>,
 including humans. It does not cover all of 
 <a href="https://www.uniprot.org" target="_blank">UniProt</a>.
 The predicted structures vary in
 confidence levels and should be interpreted with caution.
-The <a href="https://alphafold.ebi.ac.uk/" target="_blank">AlphaFold</a>
-system predicts structures for single chains, not complexes; 
-assembling the individual predictions into a complex may give 
+The database contains structures for single chains, not complexes; 
+assembling the individual structures into a complex may give 
 unphysical results where parts of the chains intersect or 
 interact poorly with one another.
 </p><p>
@@ -78,18 +87,26 @@ See also: <a href="blastprotein.html"><b>Blast Protein</b></a>,
 <a href="modeller.html"><b>Modeller Comparative</b></a>,
 <a href="modelloops.html"><b>Model Loops</b></a>,
 <a href="https://www.rbvi.ucsf.edu/chimerax/data/alphafold-aug2021/alphafold.html"
-target="_blank">comparing AlphaFold and experimental structures</a>, and
+target="_blank">AlphaFold vs. experiment</a>,
+<a href="https://www.rbvi.ucsf.edu/chimerax/data/alphafold-nov2021/af_sbgrid.html"
+target="_blank">AlphaFold for cryoEM</a>,
+<a href="https://www.rbvi.ucsf.edu/chimerax/data/alphafold-dec2021/af_multimer.html"
+target="_blank">AlphaFold for complexes</a>, and
 <a href="https://www.rbvi.ucsf.edu/chimerax/docs/videos/"
 target="_blank">ChimeraX videos</a>:
-<a href="https://youtu.be/x-9urTQ1rJY" target="_blank">searching by sequence</a>
-for AlphaFold predictions (first 5 minutes),
-<a href="https://youtu.be/W6KsBfNwDgs" target="_blank">fetching</a> an
-AlphaFold prediction,
-<a href="https://youtu.be/vj3sQfvWfDU" target="_blank">matching</a>
-an assembly,
-<a href="https://youtu.be/le7NatFo8vI" target="_blank">predicting</a>
-a new structure
 </p>
+<ul>
+<li><a href="https://youtu.be/x-9urTQ1rJY" target="_blank">searching by sequence</a>
+for AlphaFold models (first 5 minutes)
+<li><a href="https://youtu.be/W6KsBfNwDgs" target="_blank">fetching</a> an
+AlphaFold model
+<li><a href="https://youtu.be/vj3sQfvWfDU" target="_blank">matching</a>
+a known assembly structure
+<li><a href="https://youtu.be/le7NatFo8vI" target="_blank">predicting</a>
+a structure
+<li><a href="https://youtu.be/6lXeCPuTePs" target="_blank">predicting
+a complex</a>
+</ul>
 
 <p class="nav">
 [<a href="#top">back to top: AlphaFold</a>]
@@ -104,15 +121,39 @@ The <b>Sequence</b> can be specified by
 <a href="https://www.uniprot.org/" target="_blank">UniProt</a>
 name or accession number, pasted in as plain text, or chosen
 from the menu of currently open protein structure chains.
+</p><p>
+For predicting a complex (multimer), the sequences of all chains in the complex
+must be given. The same sequence must be given multiple times if it occurs in 
+multiple copies in the complex. The sequences can be specified
+either collectively as a model number chosen from the menu of currently
+open models (<i>e.g.</i> when that model contains multiple chains), or
+individually within a comma-separated list of
+<a href="https://www.uniprot.org/" target="_blank">UniProt</a>
+identifiers or pasted-in amino acid sequences.
+Prediction may only be feasible for smaller complexes
+(<a href="#caveats">details...</a>).
 </p>
 <ul>
 <li>
+<a name="prokaryote"></a>
+<b>Is prokaryote? Used for predicting complexes.</b>
+When <a href="#alphafold-multimer">AlphaFold-Multimer</a> is predicting a
+complex and finds multiple similar sequences from the same organism, it
+needs to decide which sequences are orthologous to which chain of the target.
+Since interacting genes tend to be colocalized into operons in prokaryotes, 
+this option uses smallest genomic distance (approximated by the lexicographic
+difference between UniProt identifiers) to identify interacting pairs
+of sequences within species.
+When this option is not used, sequences from the same organism
+are instead paired in order of their rank similarity to the target sequences.
+<br><br>
+<li>
 <a name="match"></a>
-<b>Fetch</b> gets the most sequence-similar prediction available from the
+<b>Fetch</b> gets the most sequence-similar model available from the
 <a href="https://alphafold.ebi.ac.uk/" target="_blank">AlphaFold Database</a>
 for each specified chain. 
 Specifying a whole model specifies all of its protein chains.
-For each chain, a prediction is obtained for the exact UniProt entry 
+For each chain, a model is obtained for the exact UniProt entry 
 if available, otherwise the single top hit identified by
 <a href="https://en.wikipedia.org/wiki/BLAT_(bioinformatics)"
 target="_blank">BLAT</a>-searching the 
@@ -162,7 +203,7 @@ These <a href="../attributes.html">attributes</a>
 can be used for <a href="#coloring">coloring</a> and other purposes.
 </ol>
 <p>
-The fetched predictions are stored locally in 
+The fetched models are stored locally in 
 <b>~/Downloads/ChimeraX/AlphaFold/</b>,
 where ~ indicates a user's home directory. 
 If a file specified for opening is not found in this local cache,
@@ -191,7 +232,7 @@ When results are returned, the hits are listed in a
 <a href="blastprotein.html#results"><b>Blast Protein</b></a> window.
 Clicking the name of a hit uses
 <a href="../commands/alphafold.html#fetch"><b>alphafold fetch</b></a> 
-to retrieve the prediction.
+to retrieve the model.
 <br><br>
 <li>
 <a name="predict"></a>
@@ -207,17 +248,23 @@ Users will need to have a Google account and to sign into it via
 a browser. Once that is done, the sign-in may be remembered depending
 on the user's browser settings; it is not kept in the 
 <a href="../preferences.html">ChimeraX preferences</a>.
+</p><p>
 A single prediction run generally takes on the order of an hour or more.
 The process includes installing various software packages on a virtual machine,
 searching sequence databases, generating a multiple sequence alignment,
 predicting atomic coordinates, and energy-minimizing the best structure.
-The free version of Google Colab does not allow for much run time.
+Predicting a multimer (complex) structure may take longer than predicting
+the structure of a monomer with the same total number of residues.
+The free version of Google Colab
+limits jobs to 12 hours and may terminate them at shorter times at Google's 
+discretion (see the <a href="https://colab.research.google.com/signup" 
+target="_blank">FAQ</a>).
 Those who want to run longer and/or more frequent calculations 
 may wish to sign up for one of the paid
 <a href="https://colab.research.google.com/signup" 
 target="_blank">Colab plans</a>.
 </p><p>
-If the sequence was specified by structure chain, the prediction will
+The model for a sequence that was specified by structure chain will
 be superimposed on that chain and assigned structure-comparison attributes 
 for further analysis
 (<a href="../commands/alphafold.html#structmatch">details...</a>).
@@ -253,6 +300,12 @@ For best reliability, it is recommended to use the
 open-source AlphaFold</a> or the <a href="https://alphafold.ebi.ac.uk/"
 target="_blank">AlphaFold Database</a> (<i>e.g.</i>, with 
 <a href="#search"><b>alphafold search</b></a>) instead.
+<br><br>
+<li>Total <b>sequence length cannot be very large</b>.
+AlphaFold runs out of graphics memory for long sequences (~800 amino acids
+on old Google Colab GPUs with 16 GB memory). 
+Multimer predictions face the same limit on the total number of residues,
+so <b>only smaller complexes can be predicted</b>. 
 </ul>
 <br>
 <li><a name="coloring"></a>
@@ -269,49 +322,49 @@ When first opened, AlphaFold-predicted structures are automatically colored by
 the <a href="https://alphafold.ebi.ac.uk/faq#faq-5" target="_blank">pLDDT
 confidence measure</a> in the B-factor field:
 </p>
-     <ul>
-     <li>90
-<table border cellpadding="4" cellspacing="0"
-style="display:inline-block; vertical-align:middle">
-<tr><td bgcolor=cornflowerblue width="10px" title="cornflower blue"></td></tr>
-</table>
-to 100
+  <ul>
+     <li>100
 <table border cellpadding="4" cellspacing="0"
 style="display:inline-block; vertical-align:middle">
 <tr><td bgcolor=blue width="10px" title="blue"></td></tr>
-</table>
-&ndash; high accuracy expected
-     <li>70
-<table border cellpadding="4" cellspacing="0"
-style="display:inline-block; vertical-align:middle">
-<tr><td bgcolor=yellow width="10px" title="yellow"></td></tr>
 </table>
 to 90
 <table border cellpadding="4" cellspacing="0"
 style="display:inline-block; vertical-align:middle">
 <tr><td bgcolor=cornflowerblue width="10px" title="cornflower blue"></td></tr>
 </table>
-&ndash; expected to be modeled well (a generally good backbone prediction)
-     <li>50
+&ndash; high accuracy expected
+     <li>90
 <table border cellpadding="4" cellspacing="0"
 style="display:inline-block; vertical-align:middle">
-<tr><td bgcolor=orange width="10px" title="orange"></td></tr>
+<tr><td bgcolor=cornflowerblue width="10px" title="cornflower blue"></td></tr>
 </table>
 to 70
 <table border cellpadding="4" cellspacing="0"
 style="display:inline-block; vertical-align:middle">
 <tr><td bgcolor=yellow width="10px" title="yellow"></td></tr>
 </table>
-&ndash; low confidence, treat with caution
-     <li>0
+&ndash; backbone expected to be modeled well
+     <li>70
 <table border cellpadding="4" cellspacing="0"
 style="display:inline-block; vertical-align:middle">
-<tr><td bgcolor=red width="10px" title="red"></td></tr>
+<tr><td bgcolor=yellow width="10px" title="yellow"></td></tr>
 </table>
 to 50
 <table border cellpadding="4" cellspacing="0"
 style="display:inline-block; vertical-align:middle">
 <tr><td bgcolor=orange width="10px" title="orange"></td></tr>
+</table>
+&ndash; low confidence, caution
+     <li>50
+<table border cellpadding="4" cellspacing="0"
+style="display:inline-block; vertical-align:middle">
+<tr><td bgcolor=orange width="10px" title="orange"></td></tr>
+</table>
+to 0
+<table border cellpadding="4" cellspacing="0"
+style="display:inline-block; vertical-align:middle">
+<tr><td bgcolor=red width="10px" title="red"></td></tr>
 </table>
 &ndash; should not be interpreted, may be disordered
      </ul>
@@ -353,18 +406,18 @@ AlphaFold-predicted model and one of the following:
 B-factor field of the PDB file)
   <li><b>C-alpha distance greater than</b> [<i>d</i>]
 &ndash; based on the <b>c_alpha_distance</b>
-residue attribute of AlphaFold predictions 
+residue attribute of AlphaFold models 
 <a href="#match">fetched by existing structure chain</a>;
 C&alpha; distance between corresponding positions of the predicted and
 existing chains after their automatic superposition
   <li><b>missing structure</b>
 &ndash; based on the <b>missing_structure</b> 
-residue attribute of AlphaFold predictions 
+residue attribute of AlphaFold models 
 <a href="#match">fetched by existing structure chain</a>;
 positions missing from the coordinates of the existing chain
   <li><b>different sequence</b>
 &ndash; based on the <b>same_sequence</b> 
-residue attribute of AlphaFold predictions 
+residue attribute of AlphaFold models 
 <a href="#match">fetched by existing structure chain</a>;
 positions with different residue types than the existing chain
   <li><b>confidence above</b> [<i>N</i>]
@@ -374,18 +427,18 @@ positions with different residue types than the existing chain
 B-factor field of the PDB file)
   <li><b>C-alpha distance less than</b> [<i>d</i>]
 &ndash; based on the <b>c_alpha_distance</b>
-residue attribute of AlphaFold predictions 
+residue attribute of AlphaFold models 
 <a href="#match">fetched by existing structure chain</a>;
 C&alpha; distance between corresponding positions of the predicted and
 existing chains after their automatic superposition
   <li><b>paired structure</b>
 &ndash; based on the <b>missing_structure</b> 
-residue attribute of AlphaFold predictions 
+residue attribute of AlphaFold models 
 <a href="#match">fetched by existing structure chain</a>;
 positions present in the coordinates of the existing structure chain
   <li><b>same sequence</b>
 &ndash; based on the <b>same_sequence</b> 
-residue attribute of AlphaFold predictions 
+residue attribute of AlphaFold models 
 <a href="#match">fetched by existing structure chain</a>;
 positions with identical residue types as the existing chain
   </ul>
@@ -427,5 +480,5 @@ B-factor field of the PDB file) and
 
 <hr>
 <address>UCSF Resource for Biocomputing, Visualization, and Informatics / 
-October 2021</address>
+December 2021</address>
 </body></html>
