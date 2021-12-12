@@ -24,13 +24,15 @@ from chimerax.atomic import Sequence
 from chimerax.alphafold.match import _log_alphafold_sequence_info
 from chimerax.core.commands import run
 from chimerax.core.errors import UserError
-from chimerax.core.settings import Settings
 from chimerax.core.tools import ToolInstance
 from chimerax.ui.gui import MainToolWindow
 
-from ..data_model import AvailableDBsDict, get_database
+from ..data_model import AvailableDBsDict, get_database, Match
 from ..utils import BlastParams, SeqId
-from .widgets import LabelledProgressBar, BlastResultsTable, BlastResultsRow
+from .widgets import (
+    LabelledProgressBar, BlastResultsTable,
+    BlastResultsRow, BlastProteinResultsSettings
+)
 
 _settings = None
 
@@ -74,8 +76,9 @@ class BlastProteinResults(ToolInstance):
 
         # from_snapshot
         self._hits = kw.pop('hits', None)
-        self._sequences: Dict[int, SeqId] = kw.pop('sequences', None)
+        self._sequences: Dict[int, Match] = kw.pop('sequences', None)
         self._table_session_data = kw.pop('table_session_data', None)
+        self.tool_window = None
 
         self._build_ui()
 
@@ -96,22 +99,32 @@ class BlastProteinResults(ToolInstance):
     @classmethod
     def from_snapshot(cls, session, data):
         """Initializer to be used when restoring ChimeraX sessions."""
-        # Data from version 1 snapshots is prefixed by _, so need to add it in
-        # for backwards compatibility.
         sequences_dict = {}
-        # We use get with a default value of 2 because for a few weeks in August and
-        # September 2021 the daily builds did not save snapshots with a version number.
-        # We can remove this when sufficient time has passed.
-        if data.get('version', 2) == 1:
+        version = data.get('version', 3)
+        if version == 1:
+            # Data from version 1 snapshots is prefixed by _, so need to add it in
+            # for backwards compatibility.
             sequences_dict = data['_sequences']
             data['params'] = BlastParams(*[x[1] for x in data['_params']])
             data['tool_name'] = data['_instance_name'] + str(data['_viewer_index'])
             data['results'] = data['_hits']
             data['table_session'] = None
-        else:
+        # The version 2 getter exists because for a few weeks in August and
+        # September 2021 the daily builds did not save snapshots with a version number.
+        # We can remove this when sufficient time has passed.
+        elif version == 2:
             sequences = data['sequences']
             for (key, hit_name, sequence) in sequences:
                 sequences_dict[key] = SeqId(hit_name, sequence)
+            data['params'] = BlastParams(*list(data['params'].values()))
+        else:
+            sequences = data['sequences']
+            for (key, hit_name, saved_seq_dict) in sequences:
+                keys = list(saved_seq_dict.keys())
+                keys[1] = 'match_id'
+                keys[2] = 'desc'
+                values = list(saved_seq_dict.values())
+                sequences_dict[key] = (hit_name, Match(**dict(zip(keys, values))))
             data['params'] = BlastParams(*list(data['params'].values()))
         return cls(
             session, data['tool_name'], from_restore=True, params = data['params']
@@ -129,16 +142,16 @@ class BlastProteinResults(ToolInstance):
 
     def take_snapshot(self, session, flags):
         data = {
-            'version': 2
+            'version': 3
             , 'ToolUI': ToolInstance.take_snapshot(self, session, flags)
             , 'table_session': self.table.session_info()
             , 'params': self.params._asdict()
             , 'tool_name': self._instance_name
             , 'results': self._hits
             , 'sequences': [(key
-                           , self._sequences[key][0]
-                           , self._sequences[key][1]
-                           ) for key in self._sequences.keys()]
+                             , self._sequences[key][0]
+                             , vars(self._sequences[key][1])
+                             ) for key in self._sequences.keys()]
         }
         return data
 
@@ -160,6 +173,27 @@ class BlastProteinResults(ToolInstance):
         }
         return defaults
 
+    def _format_param_str(self):
+        labels = list(self.params._asdict().keys())
+        values = list(self.params._asdict().values())
+        try:
+            model_no = int(float(values[0].split('/')[0][1:]))
+        except AttributeError: # AlphaFold can be run without a model
+            model_no = None
+        try:
+            chain = ''.join(['/', values[0].split('/')[1]])
+        except AttributeError: # There won't be a selected chain either
+            chain = None
+        if model_no:
+            model_formatted = ''.join([str(self.session.models._models[(model_no,)]), chain])
+        else:
+            model_formatted = None
+        values[0] = model_formatted
+        param_str = ", ".join(
+            [": ".join([str(label), str(value)]) for label, value in zip(labels, values)]
+        )
+        return param_str
+
     #
     # UI
     #
@@ -168,15 +202,11 @@ class BlastProteinResults(ToolInstance):
         parent = self.tool_window.ui_area
         global _settings
         if _settings is None:
-            class _BlastProteinResultsSettings(Settings):
-                EXPLICIT_SAVE = { BlastResultsTable.DEFAULT_SETTINGS_ATTR: {} }
-            _settings = _BlastProteinResultsSettings(self.session, "Blastprotein")
+            _settings = BlastProteinResultsSettings(self.session, "Blastprotein")
         self.main_layout = QVBoxLayout()
         self.control_widget = QWidget(parent)
 
-        param_str = ", ".join(
-            [": ".join([str(label), str(value)]) for label, value in self.params._asdict().items()]
-        )
+        param_str = self._format_param_str()
         self.param_report = QLabel(" ".join(["Query:", param_str]), parent)
         self.control_widget.setVisible(False)
 
@@ -196,7 +226,6 @@ class BlastProteinResults(ToolInstance):
         if self._from_restore:
             self._on_report_hits_signal(self._hits)
         else:
-            database = self.params.database
             if(self.job):
                 results = None
                 sequence = self.job.seq
@@ -213,8 +242,15 @@ class BlastProteinResults(ToolInstance):
             self.connect_worker_callbacks(self.worker)
             self.worker.start()
 
+        self.tool_window.ui_area.closeEvent = self.closeEvent
         self.tool_window.ui_area.setLayout(self.main_layout)
         self.tool_window.manage('side')
+
+    def closeEvent(self, event):
+        if self.worker is not None:
+            self.worker.terminate()
+        self.tool_window.ui_area.close()
+        self.tool_window = None
 
     def fill_context_menu(self, menu, x, y):
         seq_action = QAction("Load Structures", menu)
@@ -287,39 +323,46 @@ class BlastProteinResults(ToolInstance):
         self._sequences = sequences
 
     def _on_report_hits_signal(self, items):
-        items = sorted(items, key = lambda i: i['e-value'])
-        for index, item in enumerate(items):
-            item['hit_#'] = index + 1
-        self._hits = items
-        db = AvailableDBsDict[self.params.database]
         try:
-            # Compute the set of unique column names
-            columns = set()
-            for item in items:
-                columns.update(list(item.keys()))
-            # Sort the columns so that defaults come first
-            columns = list(filter(lambda x: x not in db.excluded_cols, columns))
-            nondefault_cols = list(filter(lambda x: x not in db.default_cols, columns))
-            columns = list(db.default_cols)
-            columns.extend(nondefault_cols)
-        except IndexError:
-            if not self._from_restore:
-                self.session.logger.warning("BlastProtein returned no results")
-            self._unload_progress_bar()
-        else:
-            # Convert dicts to objects (they're hashable)
-            self.table.data = [BlastResultsRow(item) for item in items]
-            for string in columns:
-                title = self._format_column_title(string)
-                self.table.add_column(title, data_fetch=lambda x, i=string: x[i])
-            self.table.sortByColumn(columns.index('e-value'), Qt.AscendingOrder)
-            if self._from_restore:
-                self.table.launch(session_info=self._table_session_data, suppress_resize=True)
+            items = sorted(items, key = lambda i: i['e-value'])
+            for index, item in enumerate(items):
+                item['hit_#'] = index + 1
+            self._hits = items
+            db = AvailableDBsDict[self.params.database]
+            try:
+                # Compute the set of unique column names
+                columns = set()
+                for item in items:
+                    columns.update(list(item.keys()))
+                # Sort the columns so that defaults come first
+                columns = list(filter(lambda x: x not in db.excluded_cols, columns))
+                nondefault_cols = list(filter(lambda x: x not in db.default_cols, columns))
+                columns = list(db.default_cols)
+                columns.extend(nondefault_cols)
+            except IndexError:
+                if not self._from_restore:
+                    self.session.logger.warning("BlastProtein returned no results")
+                self._unload_progress_bar()
             else:
-                self.table.launch(suppress_resize=True)
-            self.table.resizeColumns(max_size = 100) # pixels
-            self.control_widget.setVisible(True)
-            self._unload_progress_bar()
+                # Convert dicts to objects (they're hashable)
+                self.table.data = [BlastResultsRow(item) for item in items]
+                for string in columns:
+                    title = self._format_column_title(string)
+                    self.table.add_column(title, data_fetch=lambda x, i=string: x[i])
+                self.table.sortByColumn(columns.index('e-value'), Qt.AscendingOrder)
+                if self._from_restore:
+                    self.table.launch(session_info=self._table_session_data, suppress_resize=True)
+                else:
+                    self.table.launch(suppress_resize=True)
+                self.table.resizeColumns(max_size = 100) # pixels
+                self.control_widget.setVisible(True)
+                self._unload_progress_bar()
+        except RuntimeError:
+            # The user closed the window before the results came back.
+            # TODO: Remove the unnecessarly layer of abstraction in ui/src/gui.py that makes
+            # QWidget a member variable of a tool rather than the tool itself, so that
+            # QWidget.closeEvent() can be used to do this cleanly.
+            pass
 
     #
     # Code for loading (and spatially matching) a match entry
@@ -345,7 +388,8 @@ class BlastProteinResults(ToolInstance):
                     db.display_model(self.session, self.params.chain, m, chain_id)
 
     def _log_alphafold(self, models):
-        query_seq = Sequence(name = 'query', characters = self._sequences[0][1])
+        query_match = self._sequences[0][1]
+        query_seq = Sequence(name = 'query', characters = query_match.h_seq)
         for m in models:
             _log_alphafold_sequence_info(m, query_seq)
 
@@ -359,13 +403,13 @@ class BlastProteinResults(ToolInstance):
         the BLAST alignment.
         """
         ids = [hit['id'] for hit in selections]
-        ids.insert(0,0)
+        ids.insert(0, 0)
         names = []
         seqs = []
         for sid in ids:
-            name, seq = self._sequences[sid]
+            name, match = self._sequences[sid]
             names.append(name)
-            seqs.append(seq)
+            seqs.append(match.sequence)
         # Find columns that are gaps in all sequences and remove them.
         all_gaps = set()
         for i in range(len(seqs[0])):
@@ -462,21 +506,21 @@ class BlastResultsWorker(QThread):
                 name = self._ref_atomspec
             else:
                 name = query_match.name
-            self._sequences[0] = (name, query_match.sequence)
+            self._sequences[0] = (name, query_match)
             match_chains = {}
             sequence_only_hits = {}
             self.set_progress_maxval.emit(len(blast_results.parser.matches))
             for n, m in enumerate(blast_results.parser.matches[1:]):
                 sid = n + 1
-                hit = {"id":sid, "e-value":m.evalue, "score":m.score,
-                       "description":m.description}
+                hit = {"id": sid, "e-value": m.evalue, "score": m.score,
+                       "description": m.description}
                 if m.match:
                     hit["name"] = m.match
                     match_chains[m.match] = hit
                 else:
                     hit["name"] = m.name
                     sequence_only_hits[m.name] = hit
-                self._sequences[sid] = SeqId(hit["name"], m.sequence)
+                self._sequences[sid] = (hit["name"], m)
                 self.processed_result.emit()
             self.finished_processing_hits.emit()
             self.waiting_for_info.emit("Downloading Hit Info")

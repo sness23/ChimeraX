@@ -17,7 +17,7 @@ class Match:
     """Data from a single BLAST hit."""
 
     def __init__(self, name, match_id, desc, score, evalue,
-                 q_start, q_end, q_seq, h_seq):
+                 q_start, q_end, q_seq, h_seq, sequence = None):
         self.name = name
         self.match = match_id
         self.description = desc.strip()
@@ -29,14 +29,17 @@ class Match:
         self.h_seq = h_seq
         if len(q_seq) != len(h_seq):
             raise ValueError("sequence alignment length mismatch")
-        self.sequence = ""
+        if sequence is None:
+            self.sequence = ""
+        else:
+            self.sequence = sequence
 
     def __repr__(self):
         return "<Match %s (match=%s)>" % (self.name, self.match)
 
     def print_sequence(self, f, prefix, per_line=60):
         for i in range(0, len(self.sequence), per_line):
-            f.write("%s%s\n" % (prefix, self.sequence[i:i+per_line]))
+            f.write("%s%s\n" % (prefix, self.sequence[i:i + per_line]))
 
     def match_sequence_gaps(self, gap_count):
         seq = []

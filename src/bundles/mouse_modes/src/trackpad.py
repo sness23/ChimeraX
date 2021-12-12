@@ -32,7 +32,7 @@ class MultitouchTrackpad:
         self._full_rotation_distance = 6 * cm_tpu		# trackpad units
         self._full_width_translation_distance = 6 * cm_tpu      # trackpad units
         self._zoom_scaling = 3		# zoom (z translation) faster than xy translation.
-        self._twist_scaling = 6		# twist faster than finger rotation
+        self._twist_scaling = settings.trackpad_twist_speed	# twist faster than finger rotation
         self._wheel_click_pixels = 5	# number of pixels drag that equals one scroll wheel click
         self._touch_handler = None
         self._received_touch_event = False
@@ -288,7 +288,7 @@ class MultitouchBinding:
         if action not in self.valid_actions:
             from chimerax.core.errors import UserError
             raise UserError('Unrecognised touchpad action! Must be one of: {}'.format(
-                ', '.join(valid_actions)
+                ', '.join(self.valid_actions)
             ))
         self.action = action
         self.modifiers = modifiers
