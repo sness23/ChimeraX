@@ -38,12 +38,13 @@ class BlastProteinJob(CxServicesJob):
             kw['tool_inst_name'] = make_instance_name()
         self.setup(seq, atomspec, **kw)
         self.params = {
-                "db": self.database,
-                "evalue": str(self.cutoff),
-                "matrix": self.matrix,
-                "blimit": str(self.max_seqs),
-                "input_seq": self.seq,
-                "output_file": self.RESULTS_FILENAME
+            "db": self.database,
+            "evalue": str(self.cutoff),
+            "matrix": self.matrix,
+            "blimit": str(self.max_seqs),
+            "input_seq": self.seq,
+            "output_file": self.RESULTS_FILENAME,
+            "version": self.version
         }
         try:
             self.start("blast", self.params)
@@ -60,6 +61,7 @@ class BlastProteinJob(CxServicesJob):
         self.cutoff = cutoff                              # float
         self.matrix = matrix                              # string
         self.max_seqs = max_seqs                          # int
+        self.version = "2"                                # AlphaFold DB Version
         self.log = log
         self.tool_inst_name = tool_inst_name
 
@@ -71,7 +73,7 @@ class BlastProteinJob(CxServicesJob):
         return ''.join(data)
 
     def _params(self):
-        return BlastParams(self.atomspec, self.database, self.cutoff, self.max_seqs, self.matrix)
+        return BlastParams(self.atomspec, self.database, self.cutoff, self.max_seqs, self.matrix, self.version)
 
     def on_finish(self):
         logger = self.session.logger
@@ -95,6 +97,9 @@ class BlastProteinJob(CxServicesJob):
             else:
                 results = self.get_file(self.RESULTS_FILENAME)
                 parse_blast_results_nogui(self.session, self._params(), self.seq, results, self.log)
+
+    def __str__(self):
+        return "BlastProtein Job, ID %s" % self.id
 
 
 def manually_pull_blast_job(session, job_id, log=None):
