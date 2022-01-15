@@ -1192,6 +1192,7 @@ class MainWindow(QMainWindow, PlainTextLog):
         categories = self._order_preset_categories(preset_info.keys())
         for cat in categories:
             cat_menu = self.presets_menu.addMenu(menu_capitalize(cat))
+            cat_menu.setTearOffEnabled(True)
             self._add_preset_entries(session, cat_menu, preset_info[cat], cat)
 
     def _order_preset_categories(self, categories):
@@ -2490,7 +2491,8 @@ def _show_context_menu(event, tool_instance, tool_window, fill_cb, autostartable
     menu = QMenu()
 
     if fill_cb:
-        fill_cb(menu, event.x(), event.y())
+        pos = event.pos()
+        fill_cb(menu, pos.x(), pos.y())
     if not menu.isEmpty():
         menu.addSeparator()
     ti = tool_instance
@@ -2551,10 +2553,11 @@ def _show_context_menu(event, tool_instance, tool_window, fill_cb, autostartable
         position_action.triggered.connect(lambda *, ui=session.ui, widget=memorable, ti=ti:
             _remember_tool_pos(ui, ti, widget))
         menu.addAction(position_action)
+    p = event.globalPos()  if hasattr(event, 'globalPos') else event.globalPosition().toPoint()
     if hasattr(menu, 'exec'):
-        menu.exec(event.globalPos())	# PyQt6
+        menu.exec(p)	# PyQt6
     else:
-        menu.exec_(event.globalPos())	# PyQt5
+        menu.exec_(p)	# PyQt5
 
 def _remember_tool_pos(ui, tool_instance, widget):
     mw = ui.main_window
