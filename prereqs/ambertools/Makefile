@@ -15,7 +15,8 @@ SUPPORTED_DISTROS := Ubuntu CentOS Debian
 # CentOS uses "CentOS Linux", hence the second awk in the following line
 LINUX_FLAVOR = $(shell egrep '^NAME=' /etc/os-release | awk -F= '{ print $$2 }' | awk '{ print $$1 }' | tr -d '"')
 LINUX_RELEASE = $(shell egrep '^VERSION_ID=' /etc/os-release | awk -F= '{ print $$2 }' | tr -d '"')
-AMBERTOOLS_PREBUILT = ambertools-$(VERSION)-$(OS)-$(LINUX_FLAVOR)-$(LINUX_RELEASE).tar.bz2
+#AMBERTOOLS_PREBUILT = ambertools-$(VERSION)-$(OS)-$(LINUX_FLAVOR)-$(LINUX_RELEASE).tar.bz2
+AMBERTOOLS_PREBUILT = ambertools-20-Linux-Ubuntu-21.04.tar.bz2
 ifneq ($(filter $(LINUX_FLAVOR),$(SUPPORTED_DISTROS)),)
 else
 USE_PREBUILT=false
